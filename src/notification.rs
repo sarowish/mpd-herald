@@ -1,21 +1,13 @@
 use std::fs::File;
 
-use crate::{cache, mpd::SongInfo};
+use crate::{cache, config::CONFIG, mpd::SongInfo};
 use anyhow::Result;
 use bytes::BytesMut;
 use image::{GenericImageView, codecs::jpeg::JpegEncoder, imageops::FilterType};
-use mpd_client::responses::PlayState;
 use notify_rust::{Hint, Image, Notification, NotificationHandle};
 
 pub fn init(song: SongInfo) -> Result<Notification> {
-    let mut n = Notification::new()
-        .summary(&song.summary())
-        .body(&match song.state {
-            PlayState::Stopped => String::new(),
-            _ => song.body(),
-        })
-        .timeout(5000)
-        .finalize();
+    let mut n = song.to_notification().timeout(CONFIG.timeout).finalize();
 
     if let Some(art) = song.album_art {
         n.hint(image_to_hint(&art)?);

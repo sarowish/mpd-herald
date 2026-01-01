@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 use bytes::BytesMut;
 use mpd_client::{
@@ -5,13 +7,18 @@ use mpd_client::{
     client::{ConnectionEvent, Subsystem},
     commands,
     responses::PlayState,
+    tag::Tag,
 };
+use notify_rust::Notification;
 use tokio::net::TcpStream;
 
-use crate::notification;
+use crate::{
+    config::{CONFIG, format_notification_text},
+    notification,
+};
 
 pub async fn connect_to_mpd() -> Result<()> {
-    let connection = TcpStream::connect("localhost:6600").await?;
+    let connection = TcpStream::connect(format!("{}:{}", CONFIG.host, CONFIG.port)).await?;
 
     let (client, mut state_changes) = Client::connect(connection).await?;
 
@@ -75,9 +82,7 @@ async fn get_image(client: &Client, uri: &str) -> Result<Option<BytesMut>> {
 
 pub struct SongInfo {
     pub state: PlayState,
-    pub artist: String,
-    pub album: String,
-    pub title: String,
+    pub tags: HashMap<Tag, Vec<String>>,
     pub album_art: Option<BytesMut>,
 }
 
@@ -90,32 +95,62 @@ impl SongInfo {
         else {
             return Ok(SongInfo {
                 state: PlayState::Stopped,
-                artist: String::default(),
-                album: String::default(),
-                title: String::default(),
+                tags: HashMap::default(),
                 album_art: None,
             });
         };
 
         Ok(SongInfo {
             state: client.command(commands::Status).await?.state,
-            artist: song.artists().join(", "),
-            album: song.album().unwrap_or_default().to_owned(),
-            title: song.title().unwrap_or_default().to_owned(),
+            tags: song.tags,
             album_art: get_image(client, &song.url).await?,
         })
     }
 
-    pub fn summary(&self) -> String {
-        match self.state {
-            PlayState::Stopped => "Stopped",
-            PlayState::Playing => "Playing:",
-            PlayState::Paused => "Paused:",
+    fn tag_values(&self, tag: &Tag) -> &[String] {
+        match self.tags.get(tag) {
+            Some(v) => v.as_slice(),
+            None => &[],
         }
+    }
+
+    pub fn single_tag_value(&self, tag: &Tag) -> Option<&str> {
+        match self.tag_values(tag) {
+            [] => None,
+            [v, ..] => Some(v),
+        }
+    }
+
+    pub fn get_token_value(&self, token: &str) -> String {
+        let token = token.trim_matches('%');
+
+        match token {
+            "title" => self.single_tag_value(&Tag::Title),
+            "album" => self.single_tag_value(&Tag::Album),
+            "artist" => self.single_tag_value(&Tag::Artist),
+            "albumartist" => self.single_tag_value(&Tag::AlbumArtist),
+            _ => Some(token),
+        }
+        .unwrap_or_default()
         .to_string()
     }
 
-    pub fn body(&self) -> String {
-        format!("<b>{}</b>\n{}\n{}", self.title, self.artist, self.album)
+    pub fn to_notification(&self) -> Notification {
+        let (summary, body) = match self.state {
+            PlayState::Stopped => (
+                format_notification_text(&CONFIG.stopped_text.summary, self),
+                format_notification_text(&CONFIG.stopped_text.body, self),
+            ),
+            PlayState::Playing => (
+                format_notification_text(&CONFIG.playing_text.summary, self),
+                format_notification_text(&CONFIG.playing_text.body, self),
+            ),
+            PlayState::Paused => (
+                format_notification_text(&CONFIG.paused_text.summary, self),
+                format_notification_text(&CONFIG.paused_text.body, self),
+            ),
+        };
+
+        Notification::new().summary(&summary).body(&body).finalize()
     }
 }
