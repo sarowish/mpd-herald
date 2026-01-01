@@ -1,0 +1,13 @@
+[Unit]
+Description=Notifier for MPD
+After=mpd.service
+Requires=mpd.service
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=5
+ExecStart=/usr/bin/mpd-notify
+
+[Install]
+WantedBy=mpd.service
