@@ -1,7 +1,10 @@
-use std::collections::HashMap;
-
+use crate::{
+    config::{CONFIG, format_notification_text},
+    notification, rpc,
+};
 use anyhow::Result;
 use bytes::BytesMut;
+use discord_presence::Client as DiscordClient;
 use mpd_client::{
     Client,
     client::{ConnectionEvent, Subsystem},
@@ -10,24 +13,25 @@ use mpd_client::{
     tag::Tag,
 };
 use notify_rust::Notification;
+use std::{collections::HashMap, time::Duration};
 use tokio::net::TcpStream;
 
-use crate::{
-    config::{CONFIG, format_notification_text},
-    notification,
-};
-
-pub async fn connect_to_mpd() -> Result<()> {
+pub async fn connect_to_mpd(mut drpc: DiscordClient) -> Result<()> {
     let connection = TcpStream::connect(format!("{}:{}", CONFIG.host, CONFIG.port)).await?;
 
     let (client, mut state_changes) = Client::connect(connection).await?;
 
-    let mut handle = notification::init(SongInfo::new(&client).await?)?.show()?;
+    let mut song_info = SongInfo::new(&client).await?;
+    let mut handle = notification::init(&song_info)?.show()?;
+    rpc::update(&mut drpc, song_info).await;
 
     loop {
         match state_changes.next().await {
             Some(ConnectionEvent::SubsystemChange(Subsystem::Player)) => {
-                handle = notification::update(&mut handle, SongInfo::new(&client).await?)?;
+                song_info = SongInfo::new(&client).await?;
+
+                handle = notification::update(&mut handle, &song_info)?;
+                rpc::update(&mut drpc, song_info).await;
             }
             Some(ConnectionEvent::SubsystemChange(_)) => (),
             _ => break,
@@ -82,6 +86,8 @@ async fn get_image(client: &Client, uri: &str) -> Result<Option<BytesMut>> {
 
 pub struct SongInfo {
     pub state: PlayState,
+    pub elapsed: Option<Duration>,
+    pub duration: Option<Duration>,
     pub tags: HashMap<Tag, Vec<String>>,
     pub album_art: Option<BytesMut>,
 }
@@ -95,13 +101,19 @@ impl SongInfo {
         else {
             return Ok(SongInfo {
                 state: PlayState::Stopped,
+                elapsed: None,
+                duration: None,
                 tags: HashMap::default(),
                 album_art: None,
             });
         };
 
+        let status = client.command(commands::Status).await?;
+
         Ok(SongInfo {
-            state: client.command(commands::Status).await?.state,
+            state: status.state,
+            elapsed: status.elapsed,
+            duration: status.duration,
             tags: song.tags,
             album_art: get_image(client, &song.url).await?,
         })

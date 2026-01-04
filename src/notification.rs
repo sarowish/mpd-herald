@@ -6,17 +6,17 @@ use bytes::BytesMut;
 use image::{GenericImageView, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use notify_rust::{Hint, Image, Notification, NotificationHandle};
 
-pub fn init(song: SongInfo) -> Result<Notification> {
+pub fn init(song: &SongInfo) -> Result<Notification> {
     let mut n = song.to_notification().timeout(CONFIG.timeout).finalize();
 
-    if let Some(art) = song.album_art {
-        n.hint(image_to_hint(&art)?);
+    if let Some(art) = &song.album_art {
+        n.hint(image_to_hint(art)?);
     }
 
     Ok(n)
 }
 
-pub fn update(handle: &mut NotificationHandle, song: SongInfo) -> Result<NotificationHandle> {
+pub fn update(handle: &mut NotificationHandle, song: &SongInfo) -> Result<NotificationHandle> {
     Ok(init(song)?.id(handle.id()).show()?)
 }
 
