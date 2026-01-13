@@ -29,15 +29,15 @@ fn default_timeout() -> i32 {
 
 fn default_playing_text() -> NotificationText {
     NotificationText {
-        summary: String::from("Playing:"),
-        body: String::from("<b>%title%</b>\n%albumartist%\n%album%"),
+        summary: String::from("  %title%"),
+        body: String::from("%albumartist% - %album%"),
     }
 }
 
 fn default_paused_text() -> NotificationText {
     NotificationText {
-        summary: String::from("Paused:"),
-        body: String::from("<b>%title%</b>\n%albumartist%\n%album%"),
+        summary: String::from("  %title%"),
+        body: String::from("%albumartist% - %album%"),
     }
 }
 
