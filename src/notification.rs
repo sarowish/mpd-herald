@@ -7,7 +7,10 @@ use image::{GenericImageView, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use notify_rust::{Hint, Image, Notification, NotificationHandle};
 
 pub fn init(song: &SongInfo) -> Result<Notification> {
-    let mut n = song.to_notification().timeout(CONFIG.timeout).finalize();
+    let mut n = song
+        .to_notification()
+        .timeout(CONFIG.notification.timeout)
+        .finalize();
 
     if let Some(art) = &song.album_art {
         n.hint(image_to_hint(art)?);

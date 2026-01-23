@@ -2,6 +2,7 @@ use std::{fs, sync::LazyLock};
 
 use crate::{mpd::SongInfo, utils};
 use anyhow::Result;
+use discord_presence::models::DisplayType as PresenceDisplayType;
 use regex_lite::Regex;
 use serde::Deserialize;
 
@@ -15,46 +16,22 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| match Config::new() {
 
 const CONFIG_FILE: &str = "config.toml";
 
-fn default_host() -> String {
-    String::from("localhost")
-}
-
-fn default_port() -> u32 {
-    6600
-}
-
-fn default_timeout() -> i32 {
-    6000
-}
-
-fn default_playing_text() -> NotificationText {
-    NotificationText {
-        summary: String::from("  %title%"),
-        body: String::from("%albumartist% - %album%"),
-    }
-}
-
-fn default_paused_text() -> NotificationText {
-    NotificationText {
-        summary: String::from("  %title%"),
-        body: String::from("%albumartist% - %album%"),
-    }
-}
-
-fn default_stopped_text() -> NotificationText {
-    NotificationText {
-        summary: String::from("Stopped"),
-        body: String::default(),
-    }
-}
-
 #[derive(Deserialize)]
 pub struct NotificationText {
     pub summary: String,
     pub body: String,
 }
 
-fn extract_tokens(format: &str) -> Vec<String> {
+impl NotificationText {
+    pub fn new(summary: &str, body: &str) -> Self {
+        Self {
+            summary: summary.to_owned(),
+            body: body.to_owned(),
+        }
+    }
+}
+
+pub fn extract_tokens(format: &str) -> Vec<String> {
     static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"%\w+%").unwrap());
 
     RE.captures_iter(format)
@@ -62,7 +39,7 @@ fn extract_tokens(format: &str) -> Vec<String> {
         .collect::<Vec<_>>()
 }
 
-fn replace_tokens(format: &str, tokens: &Vec<String>, song: &SongInfo) -> String {
+pub fn replace_tokens(format: &str, tokens: &Vec<String>, song: &SongInfo) -> String {
     let mut compiled_string = format.to_owned();
 
     for token in tokens {
@@ -78,30 +55,87 @@ pub fn format_notification_text(format: &str, song: &SongInfo) -> String {
 }
 
 #[derive(Deserialize)]
-pub struct Config {
-    #[serde(default = "default_host")]
-    pub host: String,
-    #[serde(default = "default_port")]
-    pub port: u32,
-    #[serde(default = "default_timeout")]
+#[serde(default)]
+pub struct NotificationConfig {
     pub timeout: i32,
-    #[serde(default = "default_playing_text")]
     pub playing_text: NotificationText,
-    #[serde(default = "default_paused_text")]
     pub paused_text: NotificationText,
-    #[serde(default = "default_stopped_text")]
     pub stopped_text: NotificationText,
+}
+
+impl Default for NotificationConfig {
+    fn default() -> Self {
+        Self {
+            timeout: 6000,
+            playing_text: NotificationText::new("  %title%", "%albumartist% - %album%"),
+            paused_text: NotificationText::new("  %title%", "%albumartist% - %album%"),
+            stopped_text: NotificationText::new("Stopped", ""),
+        }
+    }
+}
+
+#[derive(Deserialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum DisplayType {
+    Name = 0,
+    State = 1,
+    Details = 2,
+}
+
+impl From<&DisplayType> for PresenceDisplayType {
+    fn from(value: &DisplayType) -> Self {
+        match value {
+            DisplayType::Name => PresenceDisplayType::Name,
+            DisplayType::State => PresenceDisplayType::State,
+            DisplayType::Details => PresenceDisplayType::Details,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(default)]
+pub struct DiscordRpcConfig {
+    pub client_id: u64,
+    pub state: String,
+    pub details: String,
+    pub large_text: String,
+    pub small_text: String,
+    pub large_image: String,
+    pub small_image: String,
+    pub display_type: DisplayType,
+}
+
+impl Default for DiscordRpcConfig {
+    fn default() -> Self {
+        Self {
+            client_id: 1465967948861669469,
+            state: String::from("%albumartist%"),
+            details: String::from("%title%"),
+            large_text: String::from("%album%"),
+            small_text: String::default(),
+            large_image: String::default(),
+            small_image: String::default(),
+            display_type: DisplayType::State,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(default)]
+pub struct Config {
+    pub host: String,
+    pub port: u32,
+    pub notification: NotificationConfig,
+    pub discord_rpc: DiscordRpcConfig,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            host: default_host(),
-            port: default_port(),
-            timeout: default_timeout(),
-            playing_text: default_playing_text(),
-            paused_text: default_paused_text(),
-            stopped_text: default_stopped_text(),
+            host: String::from("localhost"),
+            port: 6600,
+            notification: NotificationConfig::default(),
+            discord_rpc: DiscordRpcConfig::default(),
         }
     }
 }

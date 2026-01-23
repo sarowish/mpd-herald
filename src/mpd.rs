@@ -148,18 +148,20 @@ impl SongInfo {
     }
 
     pub fn to_notification(&self) -> Notification {
+        let notification_config = &CONFIG.notification;
+
         let (summary, body) = match self.state {
             PlayState::Stopped => (
-                format_notification_text(&CONFIG.stopped_text.summary, self),
-                format_notification_text(&CONFIG.stopped_text.body, self),
+                format_notification_text(&notification_config.stopped_text.summary, self),
+                format_notification_text(&notification_config.stopped_text.body, self),
             ),
             PlayState::Playing => (
-                format_notification_text(&CONFIG.playing_text.summary, self),
-                format_notification_text(&CONFIG.playing_text.body, self),
+                format_notification_text(&notification_config.playing_text.summary, self),
+                format_notification_text(&notification_config.playing_text.body, self),
             ),
             PlayState::Paused => (
-                format_notification_text(&CONFIG.paused_text.summary, self),
-                format_notification_text(&CONFIG.paused_text.body, self),
+                format_notification_text(&notification_config.paused_text.summary, self),
+                format_notification_text(&notification_config.paused_text.body, self),
             ),
         };
 

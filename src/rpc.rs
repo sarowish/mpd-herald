@@ -1,8 +1,11 @@
-use crate::mpd::SongInfo;
+use crate::{
+    config::{CONFIG, extract_tokens, replace_tokens},
+    mpd::SongInfo,
+};
 use anyhow::Result;
 use discord_presence::{
     Client as DiscordClient,
-    models::{ActivityTimestamps, ActivityType, DisplayType},
+    models::{ActivityTimestamps, ActivityType},
 };
 use mpd_client::{responses::PlayState, tag::Tag};
 use reqwest::Client;
@@ -113,18 +116,49 @@ pub async fn update(drpc: &mut DiscordClient, song: SongInfo) {
         return;
     }
 
+    let rpc_config = &CONFIG.discord_rpc;
+
+    let state = replace_tokens(&rpc_config.state, &extract_tokens(&rpc_config.state), &song);
+    let details = replace_tokens(
+        &rpc_config.details,
+        &extract_tokens(&rpc_config.details),
+        &song,
+    );
+    let large_text = replace_tokens(
+        &rpc_config.large_text,
+        &extract_tokens(&rpc_config.large_text),
+        &song,
+    );
+    let small_text = replace_tokens(
+        &rpc_config.small_text,
+        &extract_tokens(&rpc_config.small_text),
+        &song,
+    );
+
     let image_url = get_albumart(&song).await;
 
     let _ = drpc.set_activity(|act| {
-        act.state(song.single_tag_value(&Tag::Artist).unwrap_or_default())
-            .activity_type(ActivityType::Listening)
-            .details(song.single_tag_value(&Tag::Title).unwrap_or_default())
-            .status_display(DisplayType::State)
+        act.activity_type(ActivityType::Listening)
+            .state(state)
+            .details(details)
+            .status_display((&rpc_config.display_type).into())
             .assets(|mut assets| {
-                assets = assets.large_text(song.single_tag_value(&Tag::Album).unwrap_or_default());
+                if !large_text.is_empty() {
+                    assets = assets.large_text(large_text);
+                }
+
+                if !small_text.is_empty() {
+                    assets = assets.small_text(small_text);
+                }
 
                 if let Ok(url) = image_url {
                     assets = assets.large_image(url);
+                } else if !rpc_config.large_image.is_empty() {
+                    assets = assets.large_image(&rpc_config.large_image);
+                }
+
+                if !rpc_config.small_image.is_empty() {
+                    assets = assets.small_image(&rpc_config.small_image);
                 }
 
                 assets
