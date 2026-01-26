@@ -17,6 +17,11 @@ use std::{
 };
 use tokio::sync::Mutex;
 
+pub enum RpcEvent {
+    Ready,
+    NotConnected,
+}
+
 enum ReleaseType {
     Release,
     ReleaseGroup,
@@ -110,7 +115,7 @@ fn build_timestamp(song: &SongInfo) -> ActivityTimestamps {
     timestamps.start(start).end(end)
 }
 
-pub async fn update(drpc: &mut DiscordClient, song: SongInfo) {
+pub async fn update(drpc: &mut DiscordClient, song: &SongInfo) {
     if song.state != PlayState::Playing {
         let _ = drpc.clear_activity();
         return;
@@ -118,24 +123,24 @@ pub async fn update(drpc: &mut DiscordClient, song: SongInfo) {
 
     let rpc_config = &CONFIG.discord_rpc;
 
-    let state = replace_tokens(&rpc_config.state, &extract_tokens(&rpc_config.state), &song);
+    let state = replace_tokens(&rpc_config.state, &extract_tokens(&rpc_config.state), song);
     let details = replace_tokens(
         &rpc_config.details,
         &extract_tokens(&rpc_config.details),
-        &song,
+        song,
     );
     let large_text = replace_tokens(
         &rpc_config.large_text,
         &extract_tokens(&rpc_config.large_text),
-        &song,
+        song,
     );
     let small_text = replace_tokens(
         &rpc_config.small_text,
         &extract_tokens(&rpc_config.small_text),
-        &song,
+        song,
     );
 
-    let image_url = get_albumart(&song).await;
+    let image_url = get_albumart(song).await;
 
     let _ = drpc.set_activity(|act| {
         act.activity_type(ActivityType::Listening)
@@ -163,6 +168,6 @@ pub async fn update(drpc: &mut DiscordClient, song: SongInfo) {
 
                 assets
             })
-            .timestamps(|_| build_timestamp(&song))
+            .timestamps(|_| build_timestamp(song))
     });
 }
