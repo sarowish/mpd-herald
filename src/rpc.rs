@@ -13,11 +13,15 @@ use std::{
     collections::HashMap,
     fmt::Display,
     sync::LazyLock,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::sync::Mutex;
+use tokio::sync::{
+    Mutex,
+    mpsc::{Receiver, Sender},
+};
 
 pub enum RpcEvent {
+    Update(SongInfo, bool),
     Ready,
     NotConnected,
 }
@@ -113,6 +117,52 @@ fn build_timestamp(song: &SongInfo) -> ActivityTimestamps {
     let end = start + duration.as_secs();
 
     timestamps.start(start).end(end)
+}
+
+pub async fn run(tx: Sender<RpcEvent>, mut rx: Receiver<RpcEvent>) {
+    let mut drpc = DiscordClient::with_error_config(
+        CONFIG.discord_rpc.client_id,
+        Duration::from_secs(3),
+        None,
+    );
+
+    let tx2 = tx.clone();
+
+    drpc.on_connected(move |_| {
+        tx.try_send(RpcEvent::Ready).unwrap();
+    })
+    .persist();
+    drpc.on_disconnected(move |_| tx2.try_send(RpcEvent::NotConnected).unwrap())
+        .persist();
+
+    drpc.start();
+
+    let mut latest_song = None;
+    let mut rpc_connected = false;
+
+    loop {
+        match rx.recv().await.unwrap() {
+            RpcEvent::Update(song_info, queue) => {
+                if rpc_connected {
+                    update(&mut drpc, &song_info, queue).await;
+                }
+
+                latest_song = Some(song_info);
+            }
+            RpcEvent::Ready => {
+                rpc_connected = true;
+
+                if let Some(latest_playing) = &latest_song
+                    && let PlayState::Playing = latest_playing.state
+                {
+                    update(&mut drpc, latest_playing, false).await;
+                }
+            }
+            RpcEvent::NotConnected => {
+                rpc_connected = false;
+            }
+        }
+    }
 }
 
 pub async fn update(drpc: &mut DiscordClient, song: &SongInfo, queue: bool) {

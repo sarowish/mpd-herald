@@ -5,7 +5,6 @@ use crate::{
 };
 use anyhow::Result;
 use bytes::BytesMut;
-use discord_presence::Client as DiscordClient;
 use mpd_client::{
     Client,
     client::{ConnectionEvent, Subsystem},
@@ -14,57 +13,37 @@ use mpd_client::{
     tag::Tag,
 };
 use notify_rust::Notification;
-use std::{
-    collections::HashMap,
-    sync::atomic::{AtomicBool, Ordering},
-    time::Duration,
-};
-use tokio::{net::TcpStream, sync::mpsc::Receiver};
+use std::{collections::HashMap, time::Duration};
+use tokio::{net::TcpStream, sync::mpsc};
 
-pub async fn connect_to_mpd(mut drpc: DiscordClient, mut rpc_rx: Receiver<RpcEvent>) -> Result<()> {
+pub async fn connect_to_mpd() -> Result<()> {
     let connection = TcpStream::connect(format!("{}:{}", CONFIG.host, CONFIG.port)).await?;
-
     let (client, mut mpd_rx) = Client::connect(connection).await?;
-    drpc.start();
+
+    let (tx, rx) = mpsc::channel(16);
+    let tx2 = tx.clone();
+
+    tokio::spawn(async move { rpc::run(tx2, rx).await });
 
     let mut song_info = SongInfo::new(&client).await?;
     let mut handle = notification::init(&song_info)?.show()?;
-    let rpc_connected = AtomicBool::new(false);
+    tx.send(RpcEvent::Update(song_info.clone(), false)).await?;
 
     loop {
-        tokio::select! {
-            event = mpd_rx.next() => {
-                match event {
-                    Some(ConnectionEvent::SubsystemChange(Subsystem::Player)) => {
-                        let old_info = std::mem::replace(&mut song_info, SongInfo::new(&client).await?);
-                        let only_seeked = song_info.only_seeked(&old_info);
+        match mpd_rx.next().await {
+            Some(ConnectionEvent::SubsystemChange(Subsystem::Player)) => {
+                let old_info = std::mem::replace(&mut song_info, SongInfo::new(&client).await?);
+                let only_seeked = song_info.only_seeked(&old_info);
 
-                        if  !only_seeked {
-                            handle = notification::update(&mut handle, &song_info)?;
-                        }
-
-                        if rpc_connected.load(Ordering::Relaxed) {
-                            rpc::update(&mut drpc, &song_info, only_seeked).await;
-                        }
-                    }
-                    Some(_) => (),
-                    None => return Ok(()),
+                if !only_seeked {
+                    handle = notification::update(&mut handle, &song_info)?;
                 }
-            },
-            Some(event) = rpc_rx.recv() => {
-                match event {
-                    RpcEvent::Ready => {
-                        rpc_connected.store(true, Ordering::Relaxed);
 
-                        if let PlayState::Playing = song_info.state {
-                            rpc::update(&mut drpc, &song_info, false).await;
-                        }
-                    },
-                    RpcEvent::NotConnected => {
-                        rpc_connected.store(false, Ordering::Relaxed);
-                    }
-                }
+                tx.send(RpcEvent::Update(song_info.clone(), only_seeked))
+                    .await?;
             }
+            Some(_) => (),
+            None => return Ok(()),
         }
     }
 }
@@ -112,6 +91,7 @@ async fn get_image(client: &Client, uri: &str) -> Result<Option<BytesMut>> {
     Ok(Some(out))
 }
 
+#[derive(Clone)]
 pub struct SongInfo {
     pub state: PlayState,
     pub elapsed: Option<Duration>,
