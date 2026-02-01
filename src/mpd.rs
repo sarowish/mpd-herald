@@ -37,13 +37,14 @@ pub async fn connect_to_mpd(mut drpc: DiscordClient, mut rpc_rx: Receiver<RpcEve
                 match event {
                     Some(ConnectionEvent::SubsystemChange(Subsystem::Player)) => {
                         let old_info = std::mem::replace(&mut song_info, SongInfo::new(&client).await?);
+                        let only_seeked = song_info.only_seeked(&old_info);
 
-                        if !song_info.only_seeked(&old_info) {
+                        if  !only_seeked {
                             handle = notification::update(&mut handle, &song_info)?;
                         }
 
                         if rpc_connected.load(Ordering::Relaxed) {
-                            rpc::update(&mut drpc, &song_info).await;
+                            rpc::update(&mut drpc, &song_info, only_seeked).await;
                         }
                     }
                     Some(_) => (),
@@ -56,7 +57,7 @@ pub async fn connect_to_mpd(mut drpc: DiscordClient, mut rpc_rx: Receiver<RpcEve
                         rpc_connected.store(true, Ordering::Relaxed);
 
                         if let PlayState::Playing = song_info.state {
-                            rpc::update(&mut drpc, &song_info).await;
+                            rpc::update(&mut drpc, &song_info, false).await;
                         }
                     },
                     RpcEvent::NotConnected => {

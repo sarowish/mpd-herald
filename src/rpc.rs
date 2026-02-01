@@ -5,7 +5,7 @@ use crate::{
 use anyhow::Result;
 use discord_presence::{
     Client as DiscordClient,
-    models::{ActivityTimestamps, ActivityType},
+    models::{Activity, ActivityTimestamps, ActivityType},
 };
 use mpd_client::{responses::PlayState, tag::Tag};
 use reqwest::Client;
@@ -115,7 +115,7 @@ fn build_timestamp(song: &SongInfo) -> ActivityTimestamps {
     timestamps.start(start).end(end)
 }
 
-pub async fn update(drpc: &mut DiscordClient, song: &SongInfo) {
+pub async fn update(drpc: &mut DiscordClient, song: &SongInfo, queue: bool) {
     if song.state != PlayState::Playing {
         let _ = drpc.clear_activity();
         return;
@@ -142,7 +142,7 @@ pub async fn update(drpc: &mut DiscordClient, song: &SongInfo) {
 
     let image_url = get_albumart(song).await;
 
-    let _ = drpc.set_activity(|act| {
+    let activity = |act: Activity| {
         act.activity_type(ActivityType::Listening)
             .state(state)
             .details(details)
@@ -169,5 +169,11 @@ pub async fn update(drpc: &mut DiscordClient, song: &SongInfo) {
                 assets
             })
             .timestamps(|_| build_timestamp(song))
-    });
+    };
+
+    if queue {
+        drpc.queue_activity(activity);
+    } else {
+        let _ = drpc.set_activity(activity);
+    }
 }
