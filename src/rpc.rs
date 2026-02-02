@@ -13,7 +13,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     sync::LazyLock,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::{
     Mutex,
@@ -120,11 +120,7 @@ fn build_timestamp(song: &SongInfo) -> ActivityTimestamps {
 }
 
 pub async fn run(tx: Sender<RpcEvent>, mut rx: Receiver<RpcEvent>) {
-    let mut drpc = DiscordClient::with_error_config(
-        CONFIG.discord_rpc.client_id,
-        Duration::from_secs(3),
-        None,
-    );
+    let mut drpc = DiscordClient::new(CONFIG.discord_rpc.client_id);
 
     let tx2 = tx.clone();
 
