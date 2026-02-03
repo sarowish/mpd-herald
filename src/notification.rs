@@ -48,9 +48,9 @@ pub async fn init(client: &Client, song: &SongInfo) -> Result<Notification> {
         .timeout(CONFIG.notification.timeout)
         .finalize();
 
-    let album_art = get_image(client, &song.url).await?;
-
-    if let Some(art) = album_art {
+    if !song.url.is_empty()
+        && let Some(art) = get_image(client, &song.url).await?
+    {
         n.hint(image_to_hint(&art)?);
     }
 
