@@ -1,5 +1,5 @@
 use crate::{
-    config::{CONFIG, format_notification_text},
+    config::CONFIG,
     notification,
     rpc::{self, RpcEvent},
 };
@@ -12,7 +12,6 @@ use mpd_client::{
     responses::PlayState,
     tag::Tag,
 };
-use notify_rust::Notification;
 use std::{collections::HashMap, time::Duration};
 use tokio::{net::TcpStream, sync::mpsc};
 
@@ -36,7 +35,7 @@ pub async fn connect_to_mpd() -> Result<()> {
                 let only_seeked = song_info.only_seeked(&old_info);
 
                 if !only_seeked {
-                    handle = notification::update(&mut handle, &client, &song_info).await?;
+                    notification::update(&mut handle, &client, &song_info).await?;
                 }
 
                 tx.send(RpcEvent::Update(song_info.clone(), only_seeked))
@@ -153,27 +152,6 @@ impl SongInfo {
         }
         .unwrap_or_default()
         .to_string()
-    }
-
-    pub fn to_notification(&self) -> Notification {
-        let notification_config = &CONFIG.notification;
-
-        let (summary, body) = match self.state {
-            PlayState::Stopped => (
-                format_notification_text(&notification_config.stopped_text.summary, self),
-                format_notification_text(&notification_config.stopped_text.body, self),
-            ),
-            PlayState::Playing => (
-                format_notification_text(&notification_config.playing_text.summary, self),
-                format_notification_text(&notification_config.playing_text.body, self),
-            ),
-            PlayState::Paused => (
-                format_notification_text(&notification_config.paused_text.summary, self),
-                format_notification_text(&notification_config.paused_text.body, self),
-            ),
-        };
-
-        Notification::new().summary(&summary).body(&body).finalize()
     }
 
     pub fn only_seeked(&self, other: &Self) -> bool {

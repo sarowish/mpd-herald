@@ -2,18 +2,49 @@ use std::fs::File;
 
 use crate::{
     cache,
-    config::CONFIG,
+    config::{CONFIG, format_notification_text},
     mpd::{SongInfo, get_image},
 };
 use anyhow::Result;
 use bytes::BytesMut;
 use image::{GenericImageView, codecs::jpeg::JpegEncoder, imageops::FilterType};
-use mpd_client::Client;
+use mpd_client::{Client, responses::PlayState};
 use notify_rust::{Hint, Image, Notification, NotificationHandle};
 
+struct NotificationText {
+    summary: String,
+    body: String,
+}
+
+impl From<&SongInfo> for NotificationText {
+    fn from(value: &SongInfo) -> Self {
+        let notification_config = &CONFIG.notification;
+
+        let (summary, body) = match value.state {
+            PlayState::Stopped => (
+                format_notification_text(&notification_config.stopped_text.summary, value),
+                format_notification_text(&notification_config.stopped_text.body, value),
+            ),
+            PlayState::Playing => (
+                format_notification_text(&notification_config.playing_text.summary, value),
+                format_notification_text(&notification_config.playing_text.body, value),
+            ),
+            PlayState::Paused => (
+                format_notification_text(&notification_config.paused_text.summary, value),
+                format_notification_text(&notification_config.paused_text.body, value),
+            ),
+        };
+
+        NotificationText { summary, body }
+    }
+}
+
 pub async fn init(client: &Client, song: &SongInfo) -> Result<Notification> {
-    let mut n = song
-        .to_notification()
+    let text = NotificationText::from(song);
+
+    let mut n = Notification::new()
+        .summary(&text.summary)
+        .body(&text.body)
         .timeout(CONFIG.notification.timeout)
         .finalize();
 
@@ -30,8 +61,11 @@ pub async fn update(
     handle: &mut NotificationHandle,
     client: &Client,
     song: &SongInfo,
-) -> Result<NotificationHandle> {
-    Ok(init(client, song).await?.id(handle.id()).show()?)
+) -> Result<()> {
+    **handle = init(client, song).await?;
+    handle.update();
+
+    Ok(())
 }
 
 fn image_to_hint(bytes: &BytesMut) -> Result<Hint> {
