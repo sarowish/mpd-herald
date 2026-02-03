@@ -37,8 +37,8 @@ impl Display for ReleaseType {
             f,
             "{}",
             match self {
-                ReleaseType::Release => String::from("release"),
-                ReleaseType::ReleaseGroup => String::from("release-group"),
+                Self::Release => String::from("release"),
+                Self::ReleaseGroup => String::from("release-group"),
             }
         )
     }
@@ -60,9 +60,10 @@ async fn get_albumart(song: &SongInfo) -> Result<String> {
     let Some((rel_type, id)) = song
         .single_tag_value(&Tag::MusicBrainzReleaseId)
         .map(|id| (ReleaseType::Release, id.to_owned()))
-        .or(song
-            .single_tag_value(&release_group_id_tag)
-            .map(|id| (ReleaseType::ReleaseGroup, id.to_owned())))
+        .or_else(|| {
+            song.single_tag_value(&release_group_id_tag)
+                .map(|id| (ReleaseType::ReleaseGroup, id.to_owned()))
+        })
     else {
         return Err(anyhow::anyhow!("No musicbrainz id"));
     };
@@ -80,7 +81,7 @@ async fn get_albumart(song: &SongInfo) -> Result<String> {
         let url = resp.url().to_string();
         guard.cache.insert(id, url.clone());
         return Ok(url);
-    } else if let ReleaseType::ReleaseGroup = rel_type {
+    } else if matches!(rel_type, ReleaseType::ReleaseGroup) {
         return Err(anyhow::anyhow!("No image"));
     }
 
@@ -149,7 +150,7 @@ pub async fn run(tx: Sender<RpcEvent>, mut rx: Receiver<RpcEvent>) {
                 rpc_connected = true;
 
                 if let Some(latest_playing) = &latest_song
-                    && let PlayState::Playing = latest_playing.state
+                    && latest_playing.state == PlayState::Playing
                 {
                     update(&mut drpc, latest_playing, false).await;
                 }

@@ -50,14 +50,16 @@ pub async fn connect_to_mpd() -> Result<()> {
 pub async fn get_image(client: &Client, uri: &str) -> Result<Option<BytesMut>> {
     let mut out = BytesMut::new();
     let mut expected_size = 0;
-    let mut from_file = false;
 
-    if let Some(resp) = client.command(commands::AlbumArt::new(uri)).await? {
+    let from_file = if let Some(resp) = client.command(commands::AlbumArt::new(uri)).await? {
         out = resp.data;
         expected_size = resp.size;
         out.reserve(expected_size);
-        from_file = true;
-    }
+
+        true
+    } else {
+        false
+    };
 
     if !from_file {
         if let Some(resp) = client.command(commands::AlbumArt::new(uri)).await? {
@@ -106,7 +108,7 @@ impl SongInfo {
             .await?
             .map(|song| song.song)
         else {
-            return Ok(SongInfo {
+            return Ok(Self {
                 url: String::new(),
                 state: PlayState::Stopped,
                 elapsed: None,
@@ -117,7 +119,7 @@ impl SongInfo {
 
         let status = client.command(commands::Status).await?;
 
-        Ok(SongInfo {
+        Ok(Self {
             url: song.url,
             state: status.state,
             elapsed: status.elapsed,

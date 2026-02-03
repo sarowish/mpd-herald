@@ -85,9 +85,9 @@ pub enum DisplayType {
 impl From<&DisplayType> for PresenceDisplayType {
     fn from(value: &DisplayType) -> Self {
         match value {
-            DisplayType::Name => PresenceDisplayType::Name,
-            DisplayType::State => PresenceDisplayType::State,
-            DisplayType::Details => PresenceDisplayType::Details,
+            DisplayType::Name => Self::Name,
+            DisplayType::State => Self::State,
+            DisplayType::Details => Self::Details,
         }
     }
 }
@@ -146,9 +146,9 @@ impl Config {
         let config_str = fs::read_to_string(config_path);
 
         Ok(if let Ok(config_str) = &config_str {
-            toml::from_str::<Config>(config_str)?
+            toml::from_str::<Self>(config_str)?
         } else {
-            Config::default()
+            Self::default()
         })
     }
 }

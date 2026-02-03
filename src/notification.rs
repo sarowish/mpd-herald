@@ -35,7 +35,7 @@ impl From<&SongInfo> for NotificationText {
             ),
         };
 
-        NotificationText { summary, body }
+        Self { summary, body }
     }
 }
 
