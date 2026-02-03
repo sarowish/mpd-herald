@@ -26,7 +26,7 @@ pub async fn connect_to_mpd() -> Result<()> {
     tokio::spawn(async move { rpc::run(tx2, rx).await });
 
     let mut song_info = SongInfo::new(&client).await?;
-    let mut handle = notification::init(&song_info)?.show()?;
+    let mut handle = notification::init(&client, &song_info).await?.show()?;
     tx.send(RpcEvent::Update(song_info.clone(), false)).await?;
 
     loop {
@@ -36,7 +36,7 @@ pub async fn connect_to_mpd() -> Result<()> {
                 let only_seeked = song_info.only_seeked(&old_info);
 
                 if !only_seeked {
-                    handle = notification::update(&mut handle, &song_info)?;
+                    handle = notification::update(&mut handle, &client, &song_info).await?;
                 }
 
                 tx.send(RpcEvent::Update(song_info.clone(), only_seeked))
@@ -48,7 +48,7 @@ pub async fn connect_to_mpd() -> Result<()> {
     }
 }
 
-async fn get_image(client: &Client, uri: &str) -> Result<Option<BytesMut>> {
+pub async fn get_image(client: &Client, uri: &str) -> Result<Option<BytesMut>> {
     let mut out = BytesMut::new();
     let mut expected_size = 0;
     let mut from_file = false;
@@ -93,11 +93,11 @@ async fn get_image(client: &Client, uri: &str) -> Result<Option<BytesMut>> {
 
 #[derive(Clone)]
 pub struct SongInfo {
+    pub url: String,
     pub state: PlayState,
     pub elapsed: Option<Duration>,
     pub duration: Option<Duration>,
     pub tags: HashMap<Tag, Vec<String>>,
-    pub album_art: Option<BytesMut>,
 }
 
 impl SongInfo {
@@ -108,22 +108,22 @@ impl SongInfo {
             .map(|song| song.song)
         else {
             return Ok(SongInfo {
+                url: String::new(),
                 state: PlayState::Stopped,
                 elapsed: None,
                 duration: None,
                 tags: HashMap::default(),
-                album_art: None,
             });
         };
 
         let status = client.command(commands::Status).await?;
 
         Ok(SongInfo {
+            url: song.url,
             state: status.state,
             elapsed: status.elapsed,
             duration: status.duration,
             tags: song.tags,
-            album_art: get_image(client, &song.url).await?,
         })
     }
 

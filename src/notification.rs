@@ -1,26 +1,37 @@
 use std::fs::File;
 
-use crate::{cache, config::CONFIG, mpd::SongInfo};
+use crate::{
+    cache,
+    config::CONFIG,
+    mpd::{SongInfo, get_image},
+};
 use anyhow::Result;
 use bytes::BytesMut;
 use image::{GenericImageView, codecs::jpeg::JpegEncoder, imageops::FilterType};
+use mpd_client::Client;
 use notify_rust::{Hint, Image, Notification, NotificationHandle};
 
-pub fn init(song: &SongInfo) -> Result<Notification> {
+pub async fn init(client: &Client, song: &SongInfo) -> Result<Notification> {
     let mut n = song
         .to_notification()
         .timeout(CONFIG.notification.timeout)
         .finalize();
 
-    if let Some(art) = &song.album_art {
-        n.hint(image_to_hint(art)?);
+    let album_art = get_image(client, &song.url).await?;
+
+    if let Some(art) = album_art {
+        n.hint(image_to_hint(&art)?);
     }
 
     Ok(n)
 }
 
-pub fn update(handle: &mut NotificationHandle, song: &SongInfo) -> Result<NotificationHandle> {
-    Ok(init(song)?.id(handle.id()).show()?)
+pub async fn update(
+    handle: &mut NotificationHandle,
+    client: &Client,
+    song: &SongInfo,
+) -> Result<NotificationHandle> {
+    Ok(init(client, song).await?.id(handle.id()).show()?)
 }
 
 fn image_to_hint(bytes: &BytesMut) -> Result<Hint> {
