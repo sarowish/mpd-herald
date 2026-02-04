@@ -2,6 +2,7 @@ use crate::{
     config::CONFIG,
     notification,
     rpc::{self, RpcEvent},
+    utils::duration_as_hhmmss,
 };
 use anyhow::Result;
 use bytes::BytesMut;
@@ -12,8 +13,9 @@ use mpd_client::{
     responses::PlayState,
     tag::Tag,
 };
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, fmt::Display, time::Duration};
 use tokio::{net::TcpStream, sync::mpsc};
+use tracing::info;
 
 pub async fn connect_to_mpd() -> Result<()> {
     let connection = TcpStream::connect(format!("{}:{}", CONFIG.host, CONFIG.port)).await?;
@@ -25,13 +27,18 @@ pub async fn connect_to_mpd() -> Result<()> {
     tokio::spawn(async move { rpc::run(tx2, rx).await });
 
     let mut song_info = SongInfo::new(&client).await?;
+    info!("[MPD] {song_info}");
+
     let mut handle = notification::init(&client, &song_info).await?.show()?;
     tx.send(RpcEvent::Update(song_info.clone(), false)).await?;
 
     loop {
         match mpd_rx.next().await {
             Some(ConnectionEvent::SubsystemChange(Subsystem::Player)) => {
+                info!("[MPD] Detected player event");
+
                 let old_info = std::mem::replace(&mut song_info, SongInfo::new(&client).await?);
+                info!("[MPD] {song_info}");
                 let only_seeked = song_info.only_seeked(&old_info);
 
                 if !only_seeked {
@@ -158,5 +165,27 @@ impl SongInfo {
 
     pub fn only_seeked(&self, other: &Self) -> bool {
         self.tags == other.tags && self.state == other.state
+    }
+}
+
+impl Display for SongInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let song = format!(
+            "{} - {} ({}/{})",
+            self.single_tag_value(&Tag::AlbumArtist).unwrap_or_default(),
+            self.single_tag_value(&Tag::Title).unwrap_or_default(),
+            duration_as_hhmmss(self.elapsed),
+            duration_as_hhmmss(self.duration),
+        );
+
+        write!(
+            f,
+            "{}",
+            match self.state {
+                PlayState::Stopped => String::from("Stopped"),
+                PlayState::Playing => format!("Playing: {song}"),
+                PlayState::Paused => format!("Paused: {song}"),
+            }
+        )
     }
 }

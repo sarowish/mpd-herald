@@ -7,5 +7,6 @@ mod utils;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    tracing_subscriber::fmt::init();
     mpd::connect_to_mpd().await.unwrap();
 }

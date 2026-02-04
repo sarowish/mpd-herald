@@ -19,6 +19,7 @@ use tokio::sync::{
     Mutex,
     mpsc::{Receiver, Sender},
 };
+use tracing::{error, info};
 
 pub enum RpcEvent {
     Update(SongInfo, bool),
@@ -126,11 +127,15 @@ pub async fn run(tx: Sender<RpcEvent>, mut rx: Receiver<RpcEvent>) {
     let tx2 = tx.clone();
 
     drpc.on_connected(move |_| {
+        info!("[Discord Rpc] Connected");
         tx.try_send(RpcEvent::Ready).unwrap();
     })
     .persist();
-    drpc.on_disconnected(move |_| tx2.try_send(RpcEvent::NotConnected).unwrap())
-        .persist();
+    drpc.on_disconnected(move |_| {
+        info!("[Discord Rpc] Disconnected");
+        tx2.try_send(RpcEvent::NotConnected).unwrap()
+    })
+    .persist();
 
     drpc.start();
 
@@ -164,7 +169,10 @@ pub async fn run(tx: Sender<RpcEvent>, mut rx: Receiver<RpcEvent>) {
 
 pub async fn update(drpc: &mut DiscordClient, song: &SongInfo, queue: bool) {
     if song.state != PlayState::Playing {
-        let _ = drpc.clear_activity();
+        match drpc.clear_activity() {
+            Ok(_) => info!("[Discord Rpc] Cleared activity"),
+            Err(e) => error!("[Discord Rpc] {e:?}"),
+        }
         return;
     }
 
@@ -220,7 +228,11 @@ pub async fn update(drpc: &mut DiscordClient, song: &SongInfo, queue: bool) {
 
     if queue {
         drpc.queue_activity(activity);
+        info!("[Discord Rpc] Queued activity")
     } else {
-        let _ = drpc.set_activity(activity);
+        match drpc.set_activity(activity) {
+            Ok(_) => info!("[Discord Rpc] Set activity"),
+            Err(e) => error!("[Discord Rpc] {e:?}"),
+        }
     }
 }
