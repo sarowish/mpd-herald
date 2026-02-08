@@ -9,12 +9,7 @@ use discord_presence::{
 };
 use mpd_client::{responses::PlayState, tag::Tag};
 use reqwest::Client;
-use std::{
-    collections::HashMap,
-    fmt::Display,
-    sync::LazyLock,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{collections::HashMap, fmt::Display, sync::LazyLock};
 use tokio::sync::{
     Mutex,
     mpsc::{Receiver, Sender},
@@ -100,11 +95,6 @@ async fn get_albumart(song: &SongInfo) -> Result<String> {
 }
 
 fn build_timestamp(song: &SongInfo) -> ActivityTimestamps {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("Couldn't get system time")
-        .as_secs();
-
     let timestamps = ActivityTimestamps::new();
 
     let Some(elapsed) = song.elapsed else {
@@ -115,7 +105,7 @@ fn build_timestamp(song: &SongInfo) -> ActivityTimestamps {
         return timestamps;
     };
 
-    let start = now - elapsed.as_secs();
+    let start = song.fired_at - elapsed.as_secs();
     let end = start + duration.as_secs();
 
     timestamps.start(start).end(end)

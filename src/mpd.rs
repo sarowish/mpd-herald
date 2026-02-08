@@ -13,7 +13,11 @@ use mpd_client::{
     responses::PlayState,
     tag::Tag,
 };
-use std::{collections::HashMap, fmt::Display, time::Duration};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use tokio::{net::TcpStream, sync::mpsc};
 use tracing::info;
 
@@ -106,6 +110,7 @@ pub struct SongInfo {
     pub elapsed: Option<Duration>,
     pub duration: Option<Duration>,
     pub tags: HashMap<Tag, Vec<String>>,
+    pub fired_at: u64,
 }
 
 impl SongInfo {
@@ -121,6 +126,7 @@ impl SongInfo {
                 elapsed: None,
                 duration: None,
                 tags: HashMap::default(),
+                fired_at: 0,
             });
         };
 
@@ -132,6 +138,10 @@ impl SongInfo {
             elapsed: status.elapsed,
             duration: status.duration,
             tags: song.tags,
+            fired_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Couldn't get system time")
+                .as_secs(),
         })
     }
 
