@@ -38,7 +38,7 @@ pub async fn connect_to_mpd() -> Result<()> {
 
     loop {
         match mpd_rx.next().await {
-            Some(ConnectionEvent::SubsystemChange(Subsystem::Player)) => {
+            Some(ConnectionEvent::SubsystemChange(Subsystem::Player | Subsystem::Queue)) => {
                 info!("[MPD] Detected player event");
 
                 let old_info = std::mem::replace(&mut song_info, SongInfo::new(&client).await?);
