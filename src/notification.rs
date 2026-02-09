@@ -49,7 +49,7 @@ pub async fn init(client: &Client, song: &SongInfo) -> Result<Notification> {
         .finalize();
 
     if !song.url.is_empty()
-        && let Some(art) = get_image(client, &song.url).await?
+        && let Ok(Some(art)) = get_image(client, &song.url).await
     {
         n.hint(image_to_hint(&art)?);
     }
