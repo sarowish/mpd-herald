@@ -3,13 +3,14 @@ use std::fs::File;
 use crate::{
     cache,
     config::{CONFIG, format_notification_text},
-    mpd::{SongInfo, get_image},
+    mpd::SongInfo,
 };
 use anyhow::Result;
 use bytes::BytesMut;
 use image::{GenericImageView, codecs::jpeg::JpegEncoder, imageops::FilterType};
-use mpd_client::{Client, responses::PlayState};
+use mpd_client::responses::PlayState;
 use notify_rust::{Hint, Image, Notification, NotificationHandle};
+use tokio::sync::mpsc::Receiver;
 
 struct NotificationText {
     summary: String,
@@ -39,7 +40,18 @@ impl From<&SongInfo> for NotificationText {
     }
 }
 
-pub async fn init(client: &Client, song: &SongInfo) -> Result<Notification> {
+pub async fn run(
+    mut handle: NotificationHandle,
+    mut rx: Receiver<(SongInfo, Option<BytesMut>)>,
+) -> Result<()> {
+    while let Some((song_info, art)) = rx.recv().await {
+        update(&mut handle, &song_info, art).await?;
+    }
+
+    Ok(())
+}
+
+pub async fn init(song: &SongInfo, art: Option<BytesMut>) -> Result<Notification> {
     let text = NotificationText::from(song);
 
     let mut n = Notification::new()
@@ -49,7 +61,7 @@ pub async fn init(client: &Client, song: &SongInfo) -> Result<Notification> {
         .finalize();
 
     if !song.url.is_empty()
-        && let Ok(Some(art)) = get_image(client, &song.url).await
+        && let Some(art) = art
     {
         n.hint(image_to_hint(&art)?);
     }
@@ -59,10 +71,10 @@ pub async fn init(client: &Client, song: &SongInfo) -> Result<Notification> {
 
 pub async fn update(
     handle: &mut NotificationHandle,
-    client: &Client,
     song: &SongInfo,
+    art: Option<BytesMut>,
 ) -> Result<()> {
-    **handle = init(client, song).await?;
+    **handle = init(song, art).await?;
     handle.update();
 
     Ok(())
