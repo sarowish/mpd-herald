@@ -17,6 +17,7 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| match Config::new() {
 const CONFIG_FILE: &str = "config.toml";
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NotificationText {
     pub summary: String,
     pub body: String,
@@ -55,8 +56,9 @@ pub fn format_notification_text(format: &str, song: &SongInfo) -> String {
 }
 
 #[derive(Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct NotificationConfig {
+    pub enable: bool,
     pub timeout: i32,
     pub playing_text: NotificationText,
     pub paused_text: NotificationText,
@@ -66,6 +68,7 @@ pub struct NotificationConfig {
 impl Default for NotificationConfig {
     fn default() -> Self {
         Self {
+            enable: true,
             timeout: 6000,
             playing_text: NotificationText::new("  %title%", "%albumartist% - %album%"),
             paused_text: NotificationText::new("  %title%", "%albumartist% - %album%"),
@@ -93,8 +96,9 @@ impl From<&DisplayType> for PresenceDisplayType {
 }
 
 #[derive(Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct DiscordRpcConfig {
+    pub enable: bool,
     pub client_id: u64,
     pub state: String,
     pub details: String,
@@ -108,6 +112,7 @@ pub struct DiscordRpcConfig {
 impl Default for DiscordRpcConfig {
     fn default() -> Self {
         Self {
+            enable: true,
             client_id: 1465967948861669469,
             state: String::from("%albumartist%"),
             details: String::from("%title%"),
@@ -121,7 +126,7 @@ impl Default for DiscordRpcConfig {
 }
 
 #[derive(Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub host: String,
     pub port: u32,

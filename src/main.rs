@@ -1,3 +1,5 @@
+use crate::config::CONFIG;
+
 mod cache;
 mod config;
 mod mpd;
@@ -8,5 +10,10 @@ mod utils;
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     tracing_subscriber::fmt::init();
+
+    if !CONFIG.notification.enable && !CONFIG.discord_rpc.enable {
+        return;
+    }
+
     mpd::connect_to_mpd().await.unwrap();
 }

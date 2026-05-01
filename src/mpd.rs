@@ -26,21 +26,28 @@ pub async fn connect_to_mpd() -> Result<()> {
     let (client, mut mpd_rx) = Client::connect(connection).await?;
 
     let (rpc_tx, rpc_rx) = mpsc::channel(16);
-    let tx2 = rpc_tx.clone();
-    tokio::spawn(async move { rpc::run(tx2, rpc_rx).await });
+
+    if CONFIG.discord_rpc.enable {
+        let tx2 = rpc_tx.clone();
+        tokio::spawn(async move { rpc::run(tx2, rpc_rx).await });
+    }
 
     let mut song_info = SongInfo::new(&client).await?;
     info!("[MPD] {song_info}");
 
     let (notification_tx, notification_rx) = mpsc::channel(16);
 
-    let art = get_image(&client, &song_info.url).await.ok().flatten();
-    let handle = notification::init(&song_info, art).await?.show()?;
-    tokio::spawn(async move { notification::run(handle, notification_rx).await });
+    if CONFIG.notification.enable {
+        let art = get_image(&client, &song_info.url).await.ok().flatten();
+        let handle = notification::init(&song_info, art).await?.show()?;
+        tokio::spawn(async move { notification::run(handle, notification_rx).await });
+    }
 
-    rpc_tx
-        .send(RpcEvent::Update(song_info.clone(), false))
-        .await?;
+    if CONFIG.discord_rpc.enable {
+        rpc_tx
+            .send(RpcEvent::Update(song_info.clone(), false))
+            .await?;
+    }
 
     loop {
         match mpd_rx.next().await {
@@ -51,15 +58,17 @@ pub async fn connect_to_mpd() -> Result<()> {
                 info!("[MPD] {song_info}");
                 let only_seeked = song_info.only_seeked(&old_info);
 
-                if !only_seeked {
+                if CONFIG.notification.enable && !only_seeked {
                     let art = get_image(&client, &song_info.url).await.ok().flatten();
                     let s = song_info.clone();
                     notification_tx.send((s, art)).await?;
                 }
 
-                rpc_tx
-                    .send(RpcEvent::Update(song_info.clone(), only_seeked))
-                    .await?;
+                if CONFIG.discord_rpc.enable {
+                    rpc_tx
+                        .send(RpcEvent::Update(song_info.clone(), only_seeked))
+                        .await?;
+                }
             }
             Some(_) => (),
             None => return Ok(()),
