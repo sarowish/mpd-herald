@@ -12,7 +12,7 @@ use reqwest::Client;
 use std::{collections::HashMap, fmt::Display, sync::LazyLock};
 use tokio::sync::{
     Mutex,
-    mpsc::{Receiver, Sender},
+    mpsc::{self, Receiver, Sender},
 };
 use tracing::{error, info};
 
@@ -20,6 +20,19 @@ pub enum RpcEvent {
     Update(SongInfo, bool),
     Ready,
     NotConnected,
+}
+
+pub fn spawn() -> Option<Sender<RpcEvent>> {
+    if !CONFIG.discord_rpc.enable {
+        return None;
+    }
+
+    let (rpc_tx, rpc_rx) = mpsc::channel(16);
+
+    let tx2 = rpc_tx.clone();
+    tokio::spawn(async move { run(tx2, rpc_rx).await });
+
+    Some(rpc_tx)
 }
 
 enum ReleaseType {

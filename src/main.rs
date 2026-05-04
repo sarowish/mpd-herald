@@ -1,19 +1,24 @@
-use crate::config::CONFIG;
+use crate::{config::CONFIG, service::Service};
+use anyhow::Result;
 
 mod cache;
 mod config;
 mod mpd;
 mod notification;
 mod rpc;
+mod service;
 mod utils;
 
 #[tokio::main(flavor = "multi_thread")]
-async fn main() {
+async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    if !CONFIG.notification.enable && !CONFIG.discord_rpc.enable {
-        return;
-    }
+    anyhow::ensure!(
+        CONFIG.notification.enable || CONFIG.discord_rpc.enable,
+        "both notification and discord_rpc are disabled"
+    );
 
-    mpd::connect_to_mpd().await.unwrap();
+    let mut service = Service::new().await?;
+
+    service.run().await
 }

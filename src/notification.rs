@@ -1,5 +1,3 @@
-use std::fs::File;
-
 use crate::{
     cache,
     config::{CONFIG, format_notification_text},
@@ -10,7 +8,8 @@ use bytes::BytesMut;
 use image::{GenericImageView, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use mpd_client::responses::PlayState;
 use notify_rust::{Hint, Image, Notification, NotificationHandle};
-use tokio::sync::mpsc::Receiver;
+use std::fs::File;
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 struct NotificationText {
     summary: String,
@@ -40,12 +39,27 @@ impl From<&SongInfo> for NotificationText {
     }
 }
 
-pub async fn run(
-    mut handle: NotificationHandle,
-    mut rx: Receiver<(SongInfo, Option<BytesMut>)>,
-) -> Result<()> {
+pub fn spawn() -> Option<Sender<(SongInfo, Option<BytesMut>)>> {
+    if !CONFIG.notification.enable {
+        return None;
+    }
+
+    let (notification_tx, notification_rx) = mpsc::channel(16);
+
+    tokio::spawn(async move { run(notification_rx).await });
+
+    Some(notification_tx)
+}
+
+pub async fn run(mut rx: Receiver<(SongInfo, Option<BytesMut>)>) -> Result<()> {
+    let mut handle = None;
+
     while let Some((song_info, art)) = rx.recv().await {
-        update(&mut handle, &song_info, art).await?;
+        if let Some(h) = &mut handle {
+            update(h, &song_info, art).await?;
+        } else {
+            handle = Some(init(&song_info, art).await?.show()?);
+        }
     }
 
     Ok(())
