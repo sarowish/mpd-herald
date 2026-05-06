@@ -126,12 +126,27 @@ impl Default for DiscordRpcConfig {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LastFmConfig {
+    pub enable: bool,
+    pub api_key: String,
+    pub secret: String,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct ScrobblingConfig {
+    pub lastfm: Option<LastFmConfig>,
+}
+
+#[derive(Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub host: String,
     pub port: u32,
     pub notification: NotificationConfig,
     pub discord_rpc: DiscordRpcConfig,
+    pub scrobbling: ScrobblingConfig,
 }
 
 impl Default for Config {
@@ -141,6 +156,7 @@ impl Default for Config {
             port: 6600,
             notification: NotificationConfig::default(),
             discord_rpc: DiscordRpcConfig::default(),
+            scrobbling: ScrobblingConfig::default(),
         }
     }
 }

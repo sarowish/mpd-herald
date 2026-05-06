@@ -1,12 +1,11 @@
-use crate::{config::CONFIG, utils::duration_as_hhmmss};
+use crate::{
+    config::CONFIG,
+    utils::{self, duration_as_hhmmss},
+};
 use anyhow::Result;
 use bytes::BytesMut;
 use mpd_client::{Client, client::ConnectionEvents, commands, responses::PlayState, tag::Tag};
-use std::{
-    collections::HashMap,
-    fmt::Display,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{collections::HashMap, fmt::Display, time::Duration};
 use tokio::net::TcpStream;
 
 pub async fn connect() -> Result<(Client, ConnectionEvents)> {
@@ -72,6 +71,8 @@ pub struct SongInfo {
 
 impl SongInfo {
     pub async fn new(client: &Client) -> Result<Self> {
+        let fired_at = utils::now();
+
         let Some(song) = client
             .command(commands::CurrentSong)
             .await?
@@ -83,7 +84,7 @@ impl SongInfo {
                 elapsed: None,
                 duration: None,
                 tags: HashMap::default(),
-                fired_at: 0,
+                fired_at,
             });
         };
 
@@ -95,10 +96,7 @@ impl SongInfo {
             elapsed: status.elapsed,
             duration: status.duration,
             tags: song.tags,
-            fired_at: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("Couldn't get system time")
-                .as_secs(),
+            fired_at,
         })
     }
 
@@ -141,9 +139,25 @@ impl SongInfo {
         .to_string()
     }
 
-    pub fn only_seeked(&self, other: &Self) -> bool {
-        self.tags == other.tags && self.state == other.state
+    pub fn check_update(&self, other: &Self) -> SongUpdate {
+        if self.state == PlayState::Stopped {
+            return SongUpdate::Stopped;
+        }
+
+        match (self.tags == other.tags, self.state == other.state) {
+            (true, true) => SongUpdate::Seeked,
+            (true, false) => SongUpdate::ToggledState,
+            (false, _) => SongUpdate::Changed,
+        }
     }
+}
+
+#[derive(PartialEq, Eq)]
+pub enum SongUpdate {
+    Seeked,
+    ToggledState,
+    Changed,
+    Stopped,
 }
 
 impl Display for SongInfo {

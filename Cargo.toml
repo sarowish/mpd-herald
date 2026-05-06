@@ -5,17 +5,22 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.100"
+base16ct = { version = "1.0.0", features = ["alloc"] }
 blake3 = "1.8.2"
 bytes = "1.11.0"
+clap = "4.6.1"
 dirs = "6.0.0"
 discord-presence = "3.2.0"
 hex = "0.4.3"
 image = "0.25.9"
+md-5 = "0.11.0"
 mpd_client = "1.4.1"
 notify-rust = { version = "4.11.7", features = ["images"] }
+open = "5.3.5"
 regex-lite = "0.1.8"
-reqwest = { version = "0.13.1", features = ["gzip"] }
+reqwest = { version = "0.13.1", features = ["form", "query", "gzip", "json"] }
 serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
 tokio = { version = "1.48.0", features = ["full"] }
 toml = "0.9.10"
 tracing = "0.1.44"
