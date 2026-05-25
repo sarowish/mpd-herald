@@ -15,28 +15,18 @@ pub async fn connect() -> Result<(Client, ConnectionEvents)> {
 }
 
 pub async fn get_image(client: &Client, uri: &str) -> Result<Option<BytesMut>> {
-    let mut out = BytesMut::new();
-    let mut expected_size = 0;
-
-    let from_file = if let Some(resp) = client.command(commands::AlbumArt::new(uri)).await? {
-        out = resp.data;
-        expected_size = resp.size;
-        out.reserve(expected_size);
-
-        true
+    let (from_file, resp) = if let Some(resp) = client.command(commands::AlbumArt::new(uri)).await?
+    {
+        (true, resp)
+    } else if let Some(resp) = client.command(commands::AlbumArtEmbedded::new(uri)).await? {
+        (false, resp)
     } else {
-        false
+        return Ok(None);
     };
 
-    if !from_file {
-        if let Some(resp) = client.command(commands::AlbumArt::new(uri)).await? {
-            out = resp.data;
-            expected_size = resp.size;
-            out.reserve(expected_size);
-        } else {
-            return Ok(None);
-        }
-    }
+    let mut out = resp.data;
+    let expected_size = resp.size;
+    out.reserve(expected_size);
 
     while out.len() < expected_size {
         let resp = if from_file {
