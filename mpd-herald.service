@@ -1,5 +1,5 @@
 [Unit]
-Description=Notifier for MPD
+Description=MPD companion for notifications, Discord Rich Presence, and Last.fm scrobbling
 After=mpd.service
 Requires=mpd.service
 
@@ -7,7 +7,7 @@ Requires=mpd.service
 Type=simple
 Restart=on-failure
 RestartSec=5
-ExecStart=/usr/bin/mpd-notify
+ExecStart=/usr/bin/mpd-herald
 
 [Install]
 WantedBy=mpd.service

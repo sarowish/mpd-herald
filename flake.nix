@@ -37,17 +37,17 @@
 
         craneLib = (crane.mkLib pkgs).overrideToolchain rust-toolchain;
 
-        mpd-notify = craneLib.buildPackage {
+        mpd-herald = craneLib.buildPackage {
           src = craneLib.cleanCargoSource ./.;
 
-          buildInputs = [];
+          buildInputs = [ ];
         };
       in
       {
-        packages.default = mpd-notify;
+        packages.default = mpd-herald;
 
         devShells.default = craneLib.devShell {
-          inputsFrom = [ mpd-notify ];
+          inputsFrom = [ mpd-herald ];
 
           packages = with pkgs; [
             cargo-edit
