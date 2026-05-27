@@ -1,15 +1,12 @@
-use crate::{
-    config::CONFIG,
-    utils::{self, duration_as_hhmmss},
-};
+use crate::utils::{self, duration_as_hhmmss};
 use anyhow::Result;
 use bytes::BytesMut;
 use mpd_client::{Client, client::ConnectionEvents, commands, responses::PlayState, tag::Tag};
 use std::{collections::HashMap, fmt::Display, time::Duration};
 use tokio::net::TcpStream;
 
-pub async fn connect() -> Result<(Client, ConnectionEvents)> {
-    let connection = TcpStream::connect(format!("{}:{}", CONFIG.host, CONFIG.port)).await?;
+pub async fn connect(host: &str) -> Result<(Client, ConnectionEvents)> {
+    let connection = TcpStream::connect(host).await?;
 
     Ok(Client::connect(connection).await?)
 }
@@ -88,6 +85,11 @@ impl SongInfo {
             tags: song.tags,
             fired_at,
         })
+    }
+
+    pub fn set_as_paused(&mut self) {
+        self.state = PlayState::Paused;
+        self.fired_at = utils::now();
     }
 
     fn tag_values(&self, tag: &Tag) -> &[String] {
