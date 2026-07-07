@@ -35,7 +35,6 @@ pub fn get_config_dir() -> Result<PathBuf> {
         None => bail!("Couldn't find config directory"),
     };
 
-
     Ok(path)
 }
 
