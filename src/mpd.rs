@@ -146,6 +146,7 @@ impl SongInfo {
 
 #[derive(PartialEq, Eq)]
 pub enum SongUpdate {
+    Initial,
     Seeked,
     ToggledState,
     Changed,

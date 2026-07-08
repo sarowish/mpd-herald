@@ -5,7 +5,7 @@ use crate::{
     mpd::{self, SongInfo, SongUpdate, get_image},
     notification,
     rpc::{self, RpcEvent},
-    scrobbling,
+    scrobbling::{self, ScrobbleEvent},
 };
 use anyhow::Result;
 use bytes::BytesMut;
@@ -14,13 +14,16 @@ use mpd_client::{
     client::{ConnectionEvent, Subsystem},
     responses::PlayState,
 };
-use tokio::{sync::mpsc::Sender, time::sleep};
+use tokio::{
+    sync::{mpsc::Sender, oneshot},
+    time::sleep,
+};
 use tracing::{error, info};
 
 pub struct Service {
     notification_tx: Option<Sender<(SongInfo, Option<BytesMut>)>>,
     rpc_tx: Option<Sender<RpcEvent>>,
-    scrobble_tx: Option<Sender<(SongInfo, SongUpdate)>>,
+    scrobble_tx: Option<Sender<ScrobbleEvent>>,
 }
 
 impl Service {
@@ -50,7 +53,7 @@ impl Service {
                     self.send_rpc_update(&song_info, false).await?;
 
                     if song_info.state != PlayState::Stopped {
-                        self.send_scrobbling_update(&song_info, SongUpdate::Changed)
+                        self.send_scrobbling_update(&song_info, SongUpdate::Initial)
                             .await?;
                     }
 
@@ -95,6 +98,16 @@ impl Service {
         }
     }
 
+    pub async fn shutdown(&mut self) -> Result<()> {
+        if let Some(tx) = self.scrobble_tx.take() {
+            let (ack_tx, ack_rx) = oneshot::channel();
+            tx.send(ScrobbleEvent::Shutdown(ack_tx)).await?;
+            ack_rx.await?;
+        }
+
+        Ok(())
+    }
+
     async fn send_notification_update(
         &self,
         mpd_client: &MpdClient,
@@ -123,7 +136,8 @@ impl Service {
         song_update: SongUpdate,
     ) -> Result<()> {
         if let Some(tx) = &self.scrobble_tx {
-            tx.send((song_info.to_owned(), song_update)).await?;
+            tx.send(ScrobbleEvent::Update((song_info.to_owned(), song_update)))
+                .await?;
         }
 
         Ok(())

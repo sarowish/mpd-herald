@@ -30,5 +30,32 @@ async fn main() -> Result<()> {
 
     let mut service = Service::new().await?;
 
-    service.run().await
+    tokio::select! {
+        res = service.run() => res,
+        res = wait_for_shutdown_signal() => {
+            res?;
+            service.shutdown().await
+        }
+    }
+}
+
+async fn wait_for_shutdown_signal() -> Result<()> {
+    use tokio::signal::ctrl_c;
+
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+
+        let mut sigterm = signal(SignalKind::terminate())?;
+
+        tokio::select! {
+            result = ctrl_c() => result?,
+            _ = sigterm.recv() => {}
+        }
+    }
+
+    #[cfg(not(unix))]
+    ctrl_c().await?;
+
+    Ok(())
 }

@@ -11,15 +11,23 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     fmt::Display,
-    fs::{self, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::Write,
     mem,
     time::Duration,
 };
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::{
+    mpsc::{self, Receiver, Sender},
+    oneshot,
+};
 use tracing::{error, info};
 
-pub fn spawn() -> Option<Sender<(SongInfo, SongUpdate)>> {
+pub enum ScrobbleEvent {
+    Update((SongInfo, SongUpdate)),
+    Shutdown(oneshot::Sender<()>),
+}
+
+pub fn spawn() -> Option<Sender<ScrobbleEvent>> {
     if !CONFIG.scrobbling.lastfm.as_ref().is_some_and(|c| c.enable) {
         return None;
     }
@@ -31,49 +39,77 @@ pub fn spawn() -> Option<Sender<(SongInfo, SongUpdate)>> {
     Some(scrobbling_tx)
 }
 
-pub async fn run(mut rx: Receiver<(SongInfo, SongUpdate)>) -> Result<()> {
+pub async fn run(mut rx: Receiver<ScrobbleEvent>) -> Result<()> {
     let client = Scrobbling::new().await?;
-    let mut scrobble: Option<Scrobble> = None;
+    let mut scrobble = Scrobble::read_from_disk();
 
-    while let Some((song, song_update)) = rx.recv().await {
-        if song_update == SongUpdate::Stopped {
-            if let Some(mut scrobble) = scrobble.take() {
-                scrobble.update_duration(&song);
-                client.scrobble(scrobble).await;
-            }
-        } else if let Some(scrobble) = &mut scrobble {
-            match song_update {
-                SongUpdate::ToggledState => {
-                    if song.state == PlayState::Playing {
-                        client.now_playing(scrobble).await
+    while let Some(event) = rx.recv().await {
+        match event {
+            ScrobbleEvent::Update((song, song_update)) => {
+                if song_update == SongUpdate::Stopped {
+                    if let Some(mut scrobble) = scrobble.take() {
+                        scrobble.update_duration(&song);
+                        client.scrobble(scrobble).await;
+                    }
+                } else if let Some(scrobble) = &mut scrobble {
+                    match song_update {
+                        SongUpdate::Initial => {
+                            if scrobble.is_same_song(&song) {
+                                client.on_song_toggle(song, scrobble).await;
+                            } else {
+                                client.on_song_change(song, scrobble).await;
+                            }
+                        }
+                        SongUpdate::ToggledState => {
+                            client.on_song_toggle(song, scrobble).await;
+                        }
+                        SongUpdate::Changed => {
+                            client.on_song_change(song, scrobble).await;
+                        }
+                        SongUpdate::Seeked | SongUpdate::Stopped => (),
+                    }
+                } else {
+                    let is_playing = song.state == PlayState::Playing;
+                    let s = Scrobble::new(song);
+
+                    if is_playing {
+                        client.now_playing(&s).await;
                     }
 
-                    scrobble.on_state_change(song);
+                    scrobble = Some(s);
                 }
-                SongUpdate::Changed => {
-                    let previous = scrobble.replace(song);
-                    client.now_playing(scrobble).await;
-                    client.scrobble(previous).await
+            }
+            ScrobbleEvent::Shutdown(ack) => {
+                if let Some(mut scrobble) = scrobble
+                    && let Err(e) = scrobble.save_to_disk()
+                {
+                    error!("[Last.fm] failed to save scrobble state: {e}");
                 }
-                SongUpdate::Seeked | SongUpdate::Stopped => (),
-            }
-        } else {
-            let is_playing = song.state == PlayState::Playing;
-            let s = Scrobble::new(song);
 
-            if is_playing {
-                client.now_playing(&s).await;
+                let _ = ack.send(());
+                break;
             }
-
-            scrobble = Some(s);
         }
     }
 
     Ok(())
 }
 
+fn default_state() -> PlayState {
+    PlayState::Paused
+}
+
+#[derive(Serialize, Deserialize)]
 struct Scrobble {
-    song: SongInfo,
+    #[serde(skip, default = "default_state")]
+    state: PlayState,
+    artist: Option<String>,
+    track: Option<String>,
+    album: Option<String>,
+    album_artist: Option<String>,
+    duration: Option<u64>,
+    #[serde(skip)]
+    fired_at: u64,
     timestamp: u64,
     played_duration: u64,
 }
@@ -81,21 +117,73 @@ struct Scrobble {
 impl Scrobble {
     fn new(song: SongInfo) -> Self {
         Self {
-            song,
+            state: song.state,
+            artist: song.single_tag_value(&Tag::Artist).map(ToOwned::to_owned),
+            track: song.single_tag_value(&Tag::Title).map(ToOwned::to_owned),
+            album: song.single_tag_value(&Tag::Album).map(ToOwned::to_owned),
+            album_artist: song
+                .single_tag_value(&Tag::AlbumArtist)
+                .map(ToOwned::to_owned),
+            duration: song.duration.map(|d| d.as_secs()),
+            fired_at: song.fired_at,
             timestamp: utils::now(),
             played_duration: 0,
         }
     }
 
+    fn read_from_disk() -> Option<Self> {
+        let mut path = utils::get_state_dir().ok()?.join("scrobble_state");
+        path.set_extension("json");
+
+        let scrobble = fs::read(&path)
+            .ok()
+            .and_then(|s| serde_json::from_slice(&s).ok());
+
+        std::fs::remove_file(path).ok()?;
+
+        scrobble
+    }
+
+    fn save_to_disk(&mut self) -> Result<()> {
+        if self.state == PlayState::Stopped {
+            return Ok(());
+        }
+
+        if self.state == PlayState::Playing {
+            self.played_duration += utils::now().saturating_sub(self.fired_at);
+        }
+
+        let mut path = utils::get_state_dir()?.join("scrobble_state");
+        path.set_extension("json");
+
+        let state = serde_json::to_string_pretty(self)?;
+
+        let mut file = File::create(path)?;
+        file.write_all(state.as_bytes())?;
+
+        Ok(())
+    }
+
+    fn is_same_song(&self, song: &SongInfo) -> bool {
+        self.track.as_deref() == song.single_tag_value(&Tag::Title)
+            && self.album.as_deref() == song.single_tag_value(&Tag::Album)
+            && self.artist.as_deref() == song.single_tag_value(&Tag::Artist)
+    }
+
+    fn update_song(&mut self, song: &SongInfo) {
+        self.state = song.state;
+        self.fired_at = song.fired_at;
+    }
+
     fn update_duration(&mut self, song: &SongInfo) {
-        if self.song.state == PlayState::Playing {
-            self.played_duration += song.fired_at.saturating_sub(self.song.fired_at);
+        if self.state == PlayState::Playing {
+            self.played_duration += song.fired_at.saturating_sub(self.fired_at);
         }
     }
 
     fn on_state_change(&mut self, song: SongInfo) {
         self.update_duration(&song);
-        self.song = song;
+        self.update_song(&song);
     }
 
     fn replace(&mut self, song: SongInfo) -> Self {
@@ -303,9 +391,23 @@ impl Scrobbling {
         Ok(UserSession::new(user, key))
     }
 
+    async fn on_song_toggle(&self, song: SongInfo, scrobble: &mut Scrobble) {
+        if song.state == PlayState::Playing {
+            self.now_playing(scrobble).await
+        }
+
+        scrobble.on_state_change(song);
+    }
+
+    async fn on_song_change(&self, song: SongInfo, scrobble: &mut Scrobble) {
+        let previous = scrobble.replace(song);
+        self.now_playing(scrobble).await;
+        self.scrobble(previous).await
+    }
+
     async fn scrobble(&self, scrobble: Scrobble) {
-        if let Some(duration) = scrobble.song.duration
-            && scrobble.played_duration < duration.as_secs() / 2
+        if let Some(duration) = scrobble.duration
+            && scrobble.played_duration < duration / 2
             && scrobble.played_duration < 4 * 60
         {
             return;
@@ -320,14 +422,11 @@ impl Scrobbling {
         };
 
         let method = Method::new("track.scrobble")
-            .tag_value(&scrobble, "artist", Tag::Artist)
-            .tag_value(&scrobble, "track", Tag::Title)
-            .tag_value(&scrobble, "album", Tag::Album)
-            .tag_value(&scrobble, "albumArtist", Tag::AlbumArtist)
-            .arg(
-                "duration",
-                scrobble.song.duration.unwrap_or_default().as_secs(),
-            )
+            .tag_value("artist", scrobble.artist.as_deref())
+            .tag_value("track", scrobble.track.as_deref())
+            .tag_value("album", scrobble.album.as_deref())
+            .tag_value("albumArtist", scrobble.album_artist.as_deref())
+            .arg("duration", scrobble.duration.unwrap_or_default())
             .arg("timestamp", scrobble.timestamp)
             .arg("sk", session_key)
             .auth(true);
@@ -348,14 +447,11 @@ impl Scrobbling {
         };
 
         let method = Method::new("track.updateNowPlaying")
-            .tag_value(scrobble, "artist", Tag::Artist)
-            .tag_value(scrobble, "track", Tag::Title)
-            .tag_value(scrobble, "album", Tag::Album)
-            .tag_value(scrobble, "albumArtist", Tag::AlbumArtist)
-            .arg(
-                "duration",
-                scrobble.song.duration.unwrap_or_default().as_secs(),
-            )
+            .tag_value("artist", scrobble.artist.as_deref())
+            .tag_value("track", scrobble.track.as_deref())
+            .tag_value("album", scrobble.album.as_deref())
+            .tag_value("albumArtist", scrobble.album_artist.as_deref())
+            .arg("duration", scrobble.duration.unwrap_or_default())
             .arg("sk", session_key)
             .auth(true);
 
@@ -405,8 +501,8 @@ impl<'a> Method<'a> {
         self
     }
 
-    fn tag_value(mut self, scrobble: &Scrobble, key: &'a str, tag: Tag) -> Self {
-        if let Some(value) = scrobble.song.single_tag_value(&tag) {
+    fn tag_value(mut self, key: &'a str, value: Option<&str>) -> Self {
+        if let Some(value) = value {
             self.args.push((key, value.to_owned()));
         }
 
