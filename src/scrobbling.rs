@@ -327,12 +327,18 @@ impl Scrobbling {
         let arguments = method.build(self);
 
         let request = self.client.post(BASE_URL).form(&arguments);
-        let response: Value = request.send().await?.error_for_status()?.json().await?;
+        let response = request.send().await?;
+        let status_error = response.error_for_status_ref().err();
 
-        if let Some(e) = ScrobblingError::new(&response) {
-            Err(e.into())
-        } else {
-            Ok(response)
+        match response.json().await {
+            Ok(value) => {
+                if let Some(e) = ScrobblingError::new(&value) {
+                    Err(e.into())
+                } else {
+                    Ok(value)
+                }
+            }
+            Err(e) => Err(status_error.unwrap_or(e).into()),
         }
     }
 
