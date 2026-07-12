@@ -407,7 +407,9 @@ impl Scrobbling {
 
     async fn on_song_change(&self, song: SongInfo, scrobble: &mut Scrobble) {
         let previous = scrobble.replace(song);
-        self.now_playing(scrobble).await;
+        if scrobble.state == PlayState::Playing {
+            self.now_playing(scrobble).await
+        }
         self.scrobble(previous).await
     }
 
