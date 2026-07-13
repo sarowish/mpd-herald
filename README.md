@@ -4,6 +4,26 @@
 changes to provide desktop notifications, Discord Rich Presence, and Last.fm
 now playing status and scrobbles.
 
+<p align="center">
+  <img
+    width="552"
+    src="https://github.com/user-attachments/assets/90804966-568d-43d9-8f7b-f06555b9ab13"
+    alt="Desktop notification showing the currently playing track"
+  >
+  <br>
+  <sub>Desktop Notification</sub>
+</p>
+
+<p align="center">
+  <img
+    width="552"
+    src="https://github.com/user-attachments/assets/947f0998-dc8a-4ca8-94fd-71a9b23fed14"
+    alt="Discord Rich Presence showing the currently playing track"
+  >
+  <br>
+  <sub>Discord Rich Presence</sub>
+</p>
+
 ## Install
 
 ### Cargo
