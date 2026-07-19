@@ -1,9 +1,11 @@
 use std::{fs, sync::LazyLock};
 
-use crate::{mpd::SongInfo, utils};
+use crate::{
+    format::CompiledFormat,
+    utils::{self},
+};
 use anyhow::Result;
 use discord_presence::models::DisplayType as PresenceDisplayType;
-use regex_lite::Regex;
 use serde::Deserialize;
 
 pub static CONFIG: LazyLock<Config> = LazyLock::new(|| match Config::new() {
@@ -19,40 +21,17 @@ const CONFIG_FILE: &str = "config.toml";
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct NotificationText {
-    pub summary: String,
-    pub body: String,
+    pub summary: CompiledFormat,
+    pub body: CompiledFormat,
 }
 
 impl NotificationText {
     pub fn new(summary: &str, body: &str) -> Self {
         Self {
-            summary: summary.to_owned(),
-            body: body.to_owned(),
+            summary: CompiledFormat::new(summary),
+            body: CompiledFormat::new(body),
         }
     }
-}
-
-pub fn extract_tokens(format: &str) -> Vec<String> {
-    static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"%\w+%").unwrap());
-
-    RE.captures_iter(format)
-        .map(|caps| caps[0].to_string())
-        .collect::<Vec<_>>()
-}
-
-pub fn replace_tokens(format: &str, tokens: &Vec<String>, song: &SongInfo) -> String {
-    let mut compiled_string = format.to_owned();
-
-    for token in tokens {
-        let value = song.get_token_value(token);
-        compiled_string = compiled_string.replace(token, &value);
-    }
-
-    compiled_string
-}
-
-pub fn format_notification_text(format: &str, song: &SongInfo) -> String {
-    replace_tokens(format, &extract_tokens(format), song)
 }
 
 #[derive(Deserialize)]
@@ -100,10 +79,10 @@ impl From<&DisplayType> for PresenceDisplayType {
 pub struct DiscordRpcConfig {
     pub enable: bool,
     pub client_id: u64,
-    pub state: String,
-    pub details: String,
-    pub large_text: String,
-    pub small_text: String,
+    pub state: CompiledFormat,
+    pub details: CompiledFormat,
+    pub large_text: CompiledFormat,
+    pub small_text: CompiledFormat,
     pub large_image: String,
     pub small_image: String,
     pub display_type: DisplayType,
@@ -114,10 +93,10 @@ impl Default for DiscordRpcConfig {
         Self {
             enable: true,
             client_id: 1465967948861669469,
-            state: String::from("%albumartist%"),
-            details: String::from("%title%"),
-            large_text: String::from("%album%"),
-            small_text: String::default(),
+            state: CompiledFormat::new("%albumartist%"),
+            details: CompiledFormat::new("%title%"),
+            large_text: CompiledFormat::new("%album%"),
+            small_text: CompiledFormat::default(),
             large_image: String::default(),
             small_image: String::default(),
             display_type: DisplayType::State,

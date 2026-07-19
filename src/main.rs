@@ -4,6 +4,7 @@ use anyhow::Result;
 mod cache;
 mod cli;
 mod config;
+mod format;
 mod mpd;
 mod notification;
 mod rpc;

@@ -1,7 +1,4 @@
-use crate::{
-    config::{CONFIG, extract_tokens, replace_tokens},
-    mpd::SongInfo,
-};
+use crate::{config::CONFIG, mpd::SongInfo};
 use anyhow::Result;
 use discord_presence::{
     Client as DiscordClient,
@@ -181,22 +178,10 @@ pub async fn update(drpc: &mut DiscordClient, song: &SongInfo, queue: bool) {
 
     let rpc_config = &CONFIG.discord_rpc;
 
-    let state = replace_tokens(&rpc_config.state, &extract_tokens(&rpc_config.state), song);
-    let details = replace_tokens(
-        &rpc_config.details,
-        &extract_tokens(&rpc_config.details),
-        song,
-    );
-    let large_text = replace_tokens(
-        &rpc_config.large_text,
-        &extract_tokens(&rpc_config.large_text),
-        song,
-    );
-    let small_text = replace_tokens(
-        &rpc_config.small_text,
-        &extract_tokens(&rpc_config.small_text),
-        song,
-    );
+    let state = rpc_config.state.render(song);
+    let details = rpc_config.details.render(song);
+    let large_text = rpc_config.large_text.render(song);
+    let small_text = rpc_config.small_text.render(song);
 
     let image_url = get_albumart(song).await;
 

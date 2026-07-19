@@ -1,8 +1,4 @@
-use crate::{
-    cache,
-    config::{CONFIG, format_notification_text},
-    mpd::SongInfo,
-};
+use crate::{cache, config::CONFIG, mpd::SongInfo};
 use anyhow::Result;
 use bytes::BytesMut;
 use image::{GenericImageView, codecs::jpeg::JpegEncoder, imageops::FilterType};
@@ -17,21 +13,21 @@ struct NotificationText {
 }
 
 impl From<&SongInfo> for NotificationText {
-    fn from(value: &SongInfo) -> Self {
+    fn from(song: &SongInfo) -> Self {
         let notification_config = &CONFIG.notification;
 
-        let (summary, body) = match value.state {
+        let (summary, body) = match song.state {
             PlayState::Stopped => (
-                format_notification_text(&notification_config.stopped_text.summary, value),
-                format_notification_text(&notification_config.stopped_text.body, value),
+                notification_config.stopped_text.summary.render(song),
+                notification_config.stopped_text.body.render(song),
             ),
             PlayState::Playing => (
-                format_notification_text(&notification_config.playing_text.summary, value),
-                format_notification_text(&notification_config.playing_text.body, value),
+                notification_config.playing_text.summary.render(song),
+                notification_config.playing_text.body.render(song),
             ),
             PlayState::Paused => (
-                format_notification_text(&notification_config.paused_text.summary, value),
-                format_notification_text(&notification_config.paused_text.body, value),
+                notification_config.paused_text.summary.render(song),
+                notification_config.paused_text.body.render(song),
             ),
         };
 

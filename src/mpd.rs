@@ -106,31 +106,6 @@ impl SongInfo {
         }
     }
 
-    pub fn get_token_value(&self, token: &str) -> String {
-        let token = token.trim_matches('%');
-
-        match token {
-            "name" => self.single_tag_value(&Tag::Name),
-            "artist" => self.single_tag_value(&Tag::Artist),
-            "album" => self.single_tag_value(&Tag::Album),
-            "albumartist" => self.single_tag_value(&Tag::AlbumArtist),
-            "composer" => self.single_tag_value(&Tag::Composer),
-            "date" => self.single_tag_value(&Tag::Date),
-            "originaldate" => self.single_tag_value(&Tag::OriginalDate),
-            "disc" => self.single_tag_value(&Tag::Disc),
-            "genre" => self.single_tag_value(&Tag::Genre),
-            "performer" => self.single_tag_value(&Tag::Performer),
-            "title" => self.single_tag_value(&Tag::Title),
-            "track" => self.single_tag_value(&Tag::Track),
-            "time" => return duration_as_hhmmss(self.duration),
-            "elapsed" => return duration_as_hhmmss(self.elapsed),
-            "file" => return self.url.clone(),
-            _ => Some(token),
-        }
-        .unwrap_or_default()
-        .to_string()
-    }
-
     pub fn check_update(&self, other: &Self) -> SongUpdate {
         if self.state == PlayState::Stopped {
             return SongUpdate::Stopped;
