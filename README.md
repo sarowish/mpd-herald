@@ -31,7 +31,7 @@ now playing status and scrobbles.
 Install from git with Cargo:
 
 ```sh
-cargo install --git https://github.com/sarowish/mpd-notify --locked
+cargo install --git https://github.com/sarowish/mpd-herald --locked
 ```
 
 ### Nix Flake
@@ -42,7 +42,7 @@ You can install the latest development version from GitHub using the flake:
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    mpd-herald.url = "github:sarowish/mpd-notify";
+    mpd-herald.url = "github:sarowish/mpd-herald";
   };
 
   outputs = { nixpkgs, mpd-herald, ... }: {
