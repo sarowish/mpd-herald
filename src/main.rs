@@ -12,7 +12,7 @@ mod scrobbling;
 mod service;
 mod utils;
 
-#[tokio::main(flavor = "multi_thread")]
+#[tokio::main(flavor = "multi_thread", worker_threads = 2)]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
