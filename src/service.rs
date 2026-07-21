@@ -4,7 +4,7 @@ use crate::{
     config::CONFIG,
     mpd::{self, SongInfo, SongUpdate},
     notification::{self, NotificationEvent, NotificationSender},
-    rpc::{self, RpcEvent},
+    rpc::{self, RpcSender},
     scrobbling::{self, ScrobbleEvent},
 };
 use anyhow::Result;
@@ -21,7 +21,7 @@ use tracing::{error, info};
 
 pub struct Service {
     notification_tx: Option<NotificationSender>,
-    rpc_tx: Option<Sender<RpcEvent>>,
+    rpc_tx: Option<RpcSender>,
     scrobble_tx: Option<Sender<ScrobbleEvent>>,
 }
 
@@ -48,7 +48,7 @@ impl Service {
                     info!("[MPD] {song_info}");
 
                     self.send_notification_update(&mpd_client, &song_info)?;
-                    self.send_rpc_update(&song_info, false).await?;
+                    self.send_rpc_update(&song_info)?;
 
                     if song_info.state != PlayState::Stopped {
                         self.send_scrobbling_update(&song_info, SongUpdate::Initial)
@@ -75,7 +75,7 @@ impl Service {
                                 self.send_notification_update(&mpd_client, &song_info)?;
                             }
 
-                            self.send_rpc_update(&song_info, only_seeked).await?;
+                            self.send_rpc_update(&song_info)?;
                             self.send_scrobbling_update(&song_info, song_update).await?;
                         }
                     }
@@ -83,7 +83,7 @@ impl Service {
                     if song_info.state == PlayState::Playing {
                         song_info.set_as_paused();
 
-                        self.send_rpc_update(&song_info, false).await?;
+                        self.send_rpc_update(&song_info)?;
                         self.send_scrobbling_update(&song_info, SongUpdate::ToggledState)
                             .await?;
                     }
@@ -116,10 +116,9 @@ impl Service {
         Ok(())
     }
 
-    async fn send_rpc_update(&self, song_info: &SongInfo, seek_only: bool) -> Result<()> {
+    fn send_rpc_update(&self, song_info: &SongInfo) -> Result<()> {
         if let Some(tx) = &self.rpc_tx {
-            tx.send(RpcEvent::Update(song_info.clone(), seek_only))
-                .await?;
+            tx.force_send(song_info.clone())?;
         }
 
         Ok(())

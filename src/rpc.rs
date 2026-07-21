@@ -1,4 +1,7 @@
-use crate::{config::CONFIG, mpd::SongInfo};
+use crate::{
+    config::CONFIG,
+    mpd::{SongInfo, SongUpdate},
+};
 use anyhow::Result;
 use discord_presence::{
     Client as DiscordClient,
@@ -7,27 +10,20 @@ use discord_presence::{
 use mpd_client::{responses::PlayState, tag::Tag};
 use reqwest::Client;
 use std::{collections::HashMap, fmt::Display, sync::LazyLock};
-use tokio::sync::{
-    Mutex,
-    mpsc::{self, Receiver, Sender},
-};
+use tokio::sync::{Mutex, watch};
 use tracing::{error, info};
 
-pub enum RpcEvent {
-    Update(SongInfo, bool),
-    Ready,
-    NotConnected,
-}
+pub type RpcSender = async_channel::Sender<SongInfo>;
+type RpcReceiver = async_channel::Receiver<SongInfo>;
 
-pub fn spawn() -> Option<Sender<RpcEvent>> {
+pub fn spawn() -> Option<RpcSender> {
     if !CONFIG.discord_rpc.enable {
         return None;
     }
 
-    let (rpc_tx, rpc_rx) = mpsc::channel(16);
+    let (rpc_tx, rpc_rx) = async_channel::bounded(1);
 
-    let tx2 = rpc_tx.clone();
-    tokio::spawn(async move { run(tx2, rpc_rx).await });
+    tokio::spawn(async move { run(rpc_rx).await });
 
     Some(rpc_tx)
 }
@@ -121,53 +117,65 @@ fn build_timestamp(song: &SongInfo) -> ActivityTimestamps {
     timestamps.start(start).end(end)
 }
 
-pub async fn run(tx: Sender<RpcEvent>, mut rx: Receiver<RpcEvent>) {
+async fn run(rx: RpcReceiver) {
     let mut drpc = DiscordClient::new(CONFIG.discord_rpc.client_id);
 
-    let tx2 = tx.clone();
+    let (connection_tx, mut connection_rx) = watch::channel(false);
+    let connected_tx = connection_tx.clone();
 
     drpc.on_connected(move |_| {
         info!("[Discord Rpc] Connected");
-        tx.try_send(RpcEvent::Ready).unwrap();
+        connected_tx.send_replace(true);
     })
     .persist();
     drpc.on_disconnected(move |_| {
         info!("[Discord Rpc] Disconnected");
-        tx2.try_send(RpcEvent::NotConnected).unwrap()
+        connection_tx.send_replace(false);
     })
     .persist();
 
     drpc.start();
 
     let mut latest_song = None;
-    let mut rpc_connected = false;
+    let mut connected = false;
 
     loop {
-        match rx.recv().await.unwrap() {
-            RpcEvent::Update(song_info, queue) => {
-                if rpc_connected {
-                    update(&mut drpc, &song_info, queue).await;
+        tokio::select! {
+            result = rx.recv() => {
+                let Ok(song) = result else {
+                    break;
+                };
+
+                if connected {
+                    let queue_activity = latest_song
+                            .as_ref()
+                            .is_some_and(|latest| song.check_update(latest) == SongUpdate::Seeked);
+
+                    update(&mut drpc, &song, queue_activity).await;
                 }
 
-                latest_song = Some(song_info);
+                latest_song = Some(song);
             }
-            RpcEvent::Ready => {
-                rpc_connected = true;
 
-                if let Some(latest_playing) = &latest_song
+            result = connection_rx.changed() => {
+                if result.is_err() {
+                    break;
+                }
+
+                connected = *connection_rx.borrow_and_update();
+
+                if connected
+                    && let Some(latest_playing) = &latest_song
                     && latest_playing.state == PlayState::Playing
                 {
                     update(&mut drpc, latest_playing, false).await;
                 }
             }
-            RpcEvent::NotConnected => {
-                rpc_connected = false;
-            }
         }
     }
 }
 
-pub async fn update(drpc: &mut DiscordClient, song: &SongInfo, queue: bool) {
+async fn update(drpc: &mut DiscordClient, song: &SongInfo, queue: bool) {
     if song.state != PlayState::Playing {
         match drpc.clear_activity() {
             Ok(_) => info!("[Discord Rpc] Cleared activity"),
