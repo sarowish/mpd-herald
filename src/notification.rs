@@ -1,11 +1,15 @@
-use crate::{cache, config::CONFIG, mpd::SongInfo};
+use crate::{
+    cache,
+    config::CONFIG,
+    mpd::{SongInfo, get_image},
+};
 use anyhow::Result;
+use async_channel::{Receiver, Sender};
 use bytes::BytesMut;
 use image::{GenericImageView, codecs::jpeg::JpegEncoder, imageops::FilterType};
-use mpd_client::responses::PlayState;
+use mpd_client::{Client as MpdClient, responses::PlayState};
 use notify_rust::{Hint, Image, Notification, NotificationHandle};
 use std::fs::File;
-use tokio::sync::mpsc::{self, Receiver, Sender};
 
 struct NotificationText {
     summary: String,
@@ -35,26 +39,39 @@ impl From<&SongInfo> for NotificationText {
     }
 }
 
-pub fn spawn() -> Option<Sender<(SongInfo, Option<BytesMut>)>> {
+pub struct NotificationEvent {
+    pub client: MpdClient,
+    pub song: SongInfo,
+}
+
+pub type NotificationSender = Sender<NotificationEvent>;
+type NotificationReceiver = Receiver<NotificationEvent>;
+
+pub fn spawn() -> Option<NotificationSender> {
     if !CONFIG.notification.enable {
         return None;
     }
 
-    let (notification_tx, notification_rx) = mpsc::channel(16);
+    let (notification_tx, notification_rx) = async_channel::bounded(1);
 
     tokio::spawn(async move { run(notification_rx).await });
 
     Some(notification_tx)
 }
 
-pub async fn run(mut rx: Receiver<(SongInfo, Option<BytesMut>)>) -> Result<()> {
+pub async fn run(rx: NotificationReceiver) -> Result<()> {
     let mut handle = None;
 
-    while let Some((song_info, art)) = rx.recv().await {
+    while let Ok(event) = rx.recv().await {
+        let art = get_image(&event.client, &event.song.url)
+            .await
+            .ok()
+            .flatten();
+
         if let Some(h) = &mut handle {
-            update(h, &song_info, art).await?;
+            update(h, &event.song, art).await?;
         } else {
-            handle = Some(init(&song_info, art).await?.show()?);
+            handle = Some(init(&event.song, art).await?.show()?);
         }
     }
 

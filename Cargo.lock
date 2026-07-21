@@ -1654,6 +1654,7 @@ name = "mpd-herald"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-channel",
  "base16ct",
  "blake3",
  "bytes",

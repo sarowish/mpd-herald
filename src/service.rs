@@ -2,13 +2,12 @@ use std::time::Duration;
 
 use crate::{
     config::CONFIG,
-    mpd::{self, SongInfo, SongUpdate, get_image},
-    notification,
+    mpd::{self, SongInfo, SongUpdate},
+    notification::{self, NotificationEvent, NotificationSender},
     rpc::{self, RpcEvent},
     scrobbling::{self, ScrobbleEvent},
 };
 use anyhow::Result;
-use bytes::BytesMut;
 use mpd_client::{
     Client as MpdClient,
     client::{ConnectionEvent, Subsystem},
@@ -21,7 +20,7 @@ use tokio::{
 use tracing::{error, info};
 
 pub struct Service {
-    notification_tx: Option<Sender<(SongInfo, Option<BytesMut>)>>,
+    notification_tx: Option<NotificationSender>,
     rpc_tx: Option<Sender<RpcEvent>>,
     scrobble_tx: Option<Sender<ScrobbleEvent>>,
 }
@@ -48,8 +47,7 @@ impl Service {
                     let mut song_info = SongInfo::new(&mpd_client).await?;
                     info!("[MPD] {song_info}");
 
-                    self.send_notification_update(&mpd_client, &song_info)
-                        .await?;
+                    self.send_notification_update(&mpd_client, &song_info)?;
                     self.send_rpc_update(&song_info, false).await?;
 
                     if song_info.state != PlayState::Stopped {
@@ -74,8 +72,7 @@ impl Service {
                             let only_seeked = song_update == SongUpdate::Seeked;
 
                             if !only_seeked {
-                                self.send_notification_update(&mpd_client, &song_info)
-                                    .await?;
+                                self.send_notification_update(&mpd_client, &song_info)?;
                             }
 
                             self.send_rpc_update(&song_info, only_seeked).await?;
@@ -108,14 +105,12 @@ impl Service {
         Ok(())
     }
 
-    async fn send_notification_update(
-        &self,
-        mpd_client: &MpdClient,
-        song_info: &SongInfo,
-    ) -> Result<()> {
+    fn send_notification_update(&self, mpd_client: &MpdClient, song_info: &SongInfo) -> Result<()> {
         if let Some(tx) = &self.notification_tx {
-            let art = get_image(mpd_client, &song_info.url).await.ok().flatten();
-            tx.send((song_info.to_owned(), art)).await?;
+            tx.force_send(NotificationEvent {
+                client: mpd_client.clone(),
+                song: song_info.clone(),
+            })?;
         }
 
         Ok(())
