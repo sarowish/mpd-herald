@@ -1,7 +1,5 @@
 [Unit]
 Description=MPD companion for notifications, Discord Rich Presence, and Last.fm scrobbling
-After=mpd.service
-Requires=mpd.service
 
 [Service]
 Type=simple
@@ -10,4 +8,4 @@ RestartSec=5
 ExecStart=/usr/bin/mpd-herald
 
 [Install]
-WantedBy=mpd.service
+WantedBy=default.target
