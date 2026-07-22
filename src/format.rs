@@ -113,6 +113,7 @@ mod tests {
 
     fn song_with_tags(tags: impl IntoIterator<Item = (Tag, &'static str)>) -> SongInfo {
         SongInfo {
+            queue_id: 1.into(),
             url: "music/track.flac".to_owned(),
             state: PlayState::Playing,
             elapsed: Some(Duration::from_secs(67)),

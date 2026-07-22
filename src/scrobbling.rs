@@ -1,6 +1,6 @@
 use crate::{
     config::CONFIG,
-    mpd::{SongInfo, SongUpdate},
+    mpd::{self, SongInfo, SongUpdate},
     utils::{self, open_in_browser},
 };
 use anyhow::Result;
@@ -85,9 +85,7 @@ impl Scrobble {
     }
 
     fn eligible_for_submission(&self) -> bool {
-        self.duration.is_none_or(|duration| {
-            self.played_duration >= duration / 2 || self.played_duration >= 4 * 60
-        })
+        mpd::playtime_threshold_reached(self.duration, self.played_duration)
     }
 
     fn update_song(&mut self, song: &SongInfo) {
@@ -314,7 +312,7 @@ impl Scrobbling {
                                 self.on_song_toggle(song, scrobble.current.as_mut().unwrap())
                                     .await;
                             }
-                            SongUpdate::Changed => {
+                            SongUpdate::Changed | SongUpdate::Repeated => {
                                 self.on_song_change(song, &mut scrobble).await;
                             }
                             SongUpdate::Stopped => {

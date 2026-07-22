@@ -4,7 +4,7 @@ use bytes::BytesMut;
 use mpd_client::{
     Client,
     client::{ConnectionEvents, Subsystem},
-    commands,
+    commands::{self, SongId},
     responses::PlayState,
     tag::Tag,
 };
@@ -54,6 +54,7 @@ pub async fn get_image(client: &Client, uri: &str) -> Result<Option<BytesMut>> {
 
 #[derive(Clone)]
 pub struct SongInfo {
+    pub queue_id: SongId,
     pub url: String,
     pub state: PlayState,
     pub elapsed: Option<Duration>,
@@ -66,12 +67,9 @@ impl SongInfo {
     pub async fn new(client: &Client) -> Result<Self> {
         let fired_at = utils::now();
 
-        let Some(song) = client
-            .command(commands::CurrentSong)
-            .await?
-            .map(|song| song.song)
-        else {
+        let Some(current) = client.command(commands::CurrentSong).await? else {
             return Ok(Self {
+                queue_id: u64::MAX.into(),
                 url: String::new(),
                 state: PlayState::Stopped,
                 elapsed: None,
@@ -81,9 +79,12 @@ impl SongInfo {
             });
         };
 
+        let queue_id = current.id;
+        let song = current.song;
         let status = client.command(commands::Status).await?;
 
         Ok(Self {
+            queue_id,
             url: song.url,
             state: status.state,
             elapsed: status.elapsed,
@@ -112,23 +113,47 @@ impl SongInfo {
         }
     }
 
+    fn song_repeated(&self, other: &Self) -> bool {
+        const REPEAT_START_WINDOW: Duration = Duration::from_secs(10);
+
+        let Some(other_elapsed) = other.elapsed.filter(|_| self.state == PlayState::Playing) else {
+            return false;
+        };
+
+        let played_duration =
+            other_elapsed.as_secs() + self.fired_at.saturating_sub(other.fired_at);
+
+        self.elapsed.is_some_and(|e| e <= REPEAT_START_WINDOW)
+            && playtime_threshold_reached(other.duration.map(|d| d.as_secs()), played_duration)
+    }
+
     pub fn check_update(&self, other: &Self, change_subsystem: Subsystem) -> SongUpdate {
         if self.state == PlayState::Stopped {
             return SongUpdate::Stopped;
         }
 
-        match (self.tags == other.tags, self.state == other.state) {
-            (true, true) => {
-                if change_subsystem == Subsystem::Queue {
-                    SongUpdate::Unchanged
-                } else {
-                    SongUpdate::Seeked
-                }
-            }
-            (true, false) => SongUpdate::ToggledState,
-            (false, _) => SongUpdate::Changed,
+        if self.queue_id != other.queue_id || self.url != other.url || self.tags != other.tags {
+            return SongUpdate::Changed;
+        }
+
+        if self.state != other.state {
+            return SongUpdate::ToggledState;
+        }
+
+        if change_subsystem == Subsystem::Queue {
+            return SongUpdate::Unchanged;
+        }
+
+        if self.song_repeated(other) {
+            SongUpdate::Repeated
+        } else {
+            SongUpdate::Seeked
         }
     }
+}
+
+pub fn playtime_threshold_reached(track_duration: Option<u64>, played: u64) -> bool {
+    track_duration.is_none_or(|duration| played >= duration / 2 || played >= 4 * 60)
 }
 
 #[derive(PartialEq, Eq)]
@@ -138,6 +163,7 @@ pub enum SongUpdate {
     Seeked,
     ToggledState,
     Changed,
+    Repeated,
     Stopped,
 }
 
