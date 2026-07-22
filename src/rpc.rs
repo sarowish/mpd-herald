@@ -7,7 +7,7 @@ use discord_presence::{
     Client as DiscordClient,
     models::{Activity, ActivityTimestamps, ActivityType},
 };
-use mpd_client::{responses::PlayState, tag::Tag};
+use mpd_client::{client::Subsystem, responses::PlayState, tag::Tag};
 use reqwest::Client;
 use std::{collections::HashMap, fmt::Display, sync::LazyLock};
 use tokio::sync::{Mutex, watch};
@@ -149,7 +149,7 @@ async fn run(rx: RpcReceiver) {
                 if connected {
                     let queue_activity = latest_song
                             .as_ref()
-                            .is_some_and(|latest| song.check_update(latest) == SongUpdate::Seeked);
+                            .is_some_and(|latest| song.check_update(latest, Subsystem::Player) == SongUpdate::Seeked);
 
                     update(&mut drpc, &song, queue_activity).await;
                 }

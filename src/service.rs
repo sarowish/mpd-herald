@@ -57,7 +57,7 @@ impl Service {
 
                     while let Some(event) = mpd_rx.next().await {
                         if let ConnectionEvent::SubsystemChange(
-                            Subsystem::Player | Subsystem::Queue,
+                            sub @ (Subsystem::Player | Subsystem::Queue),
                         ) = event
                         {
                             info!("[MPD] Detected player event");
@@ -68,15 +68,19 @@ impl Service {
                             );
                             info!("[MPD] {song_info}");
 
-                            let song_update = song_info.check_update(&old_info);
-                            let only_seeked = song_update == SongUpdate::Seeked;
+                            let song_update = song_info.check_update(&old_info, sub);
 
-                            if !only_seeked {
-                                self.send_notification_update(&mpd_client, &song_info)?;
+                            match song_update {
+                                SongUpdate::Unchanged => (),
+                                SongUpdate::Seeked => {
+                                    self.send_rpc_update(&song_info)?;
+                                }
+                                _ => {
+                                    self.send_notification_update(&mpd_client, &song_info)?;
+                                    self.send_rpc_update(&song_info)?;
+                                    self.send_scrobbling_update(&song_info, song_update).await?;
+                                }
                             }
-
-                            self.send_rpc_update(&song_info)?;
-                            self.send_scrobbling_update(&song_info, song_update).await?;
                         }
                     }
 

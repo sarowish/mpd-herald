@@ -1,7 +1,13 @@
 use crate::utils::{self, duration_as_hhmmss};
 use anyhow::Result;
 use bytes::BytesMut;
-use mpd_client::{Client, client::ConnectionEvents, commands, responses::PlayState, tag::Tag};
+use mpd_client::{
+    Client,
+    client::{ConnectionEvents, Subsystem},
+    commands,
+    responses::PlayState,
+    tag::Tag,
+};
 use std::{collections::HashMap, fmt::Display, time::Duration};
 use tokio::net::TcpStream;
 
@@ -106,13 +112,19 @@ impl SongInfo {
         }
     }
 
-    pub fn check_update(&self, other: &Self) -> SongUpdate {
+    pub fn check_update(&self, other: &Self, change_subsystem: Subsystem) -> SongUpdate {
         if self.state == PlayState::Stopped {
             return SongUpdate::Stopped;
         }
 
         match (self.tags == other.tags, self.state == other.state) {
-            (true, true) => SongUpdate::Seeked,
+            (true, true) => {
+                if change_subsystem == Subsystem::Queue {
+                    SongUpdate::Unchanged
+                } else {
+                    SongUpdate::Seeked
+                }
+            }
             (true, false) => SongUpdate::ToggledState,
             (false, _) => SongUpdate::Changed,
         }
@@ -122,6 +134,7 @@ impl SongInfo {
 #[derive(PartialEq, Eq)]
 pub enum SongUpdate {
     Initial,
+    Unchanged,
     Seeked,
     ToggledState,
     Changed,

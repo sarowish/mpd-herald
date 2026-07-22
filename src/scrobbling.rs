@@ -320,7 +320,7 @@ impl Scrobbling {
                             SongUpdate::Stopped => {
                                 self.on_song_stopped(song, &mut scrobble).await;
                             }
-                            SongUpdate::Seeked => {}
+                            SongUpdate::Seeked | SongUpdate::Unchanged => {}
                         }
                     } else {
                         let is_playing = song.state == PlayState::Playing;
