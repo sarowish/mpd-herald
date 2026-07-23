@@ -153,7 +153,10 @@ impl SongInfo {
 }
 
 pub fn playtime_threshold_reached(track_duration: Option<u64>, played: u64) -> bool {
-    track_duration.is_none_or(|duration| played >= duration / 2 || played >= 4 * 60)
+    match track_duration {
+        Some(duration) => played >= duration / 2 || played >= 4 * 60,
+        None => played >= 4 * 60,
+    }
 }
 
 #[derive(PartialEq, Eq)]
