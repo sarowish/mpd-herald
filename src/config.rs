@@ -110,6 +110,8 @@ pub struct LastFmConfig {
     pub enable: bool,
     pub api_key: String,
     pub secret: String,
+    #[serde(default)]
+    pub prefer_album_artist: bool,
 }
 
 #[derive(Deserialize, Default)]

@@ -119,6 +119,7 @@ display_type = "state"
 enable = false
 api_key = "your-api-key"
 secret = "your-shared-secret"
+prefer_album_artist = false
 ```
 
 At least one integration must be enabled. If notifications, Discord Rich
@@ -167,11 +168,12 @@ MusicBrainz release ID or release group ID tag. If no image is found,
 
 The `[scrobbling.lastfm]` section has:
 
-| Option    | Description                |
-| --------- | -------------------------- |
-| `enable`  | Enable Last.fm scrobbling. |
-| `api_key` | Last.fm API key.           |
-| `secret`  | Last.fm shared secret.     |
+| Option                  | Description                                            | Default |
+| ----------------------- | ------------------------------------------------------ | ------- |
+| `enable`                | Enable Last.fm scrobbling.                             | —       |
+| `api_key`               | Last.fm API key.                                       | —       |
+| `secret`                | Last.fm shared secret.                                 | —       |
+| `prefer_album_artist`   | Prefer `AlbumArtist` over `Artist` for scrobbling.     | `false` |
 
 ### Tokens
 
@@ -207,6 +209,7 @@ Add Last.fm credentials to `config.toml`:
 enable = true
 api_key = "your-api-key"
 secret = "your-shared-secret"
+prefer_album_artist = false
 ```
 
 Then authenticate:

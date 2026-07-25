@@ -42,6 +42,22 @@ pub fn spawn() -> Option<Sender<ScrobbleEvent>> {
     Some(scrobbling_tx)
 }
 
+fn song_artist(song: &SongInfo) -> Option<&str> {
+    let artist = || song.single_tag_value(&Tag::Artist);
+    let album_artist = || song.single_tag_value(&Tag::AlbumArtist);
+
+    if CONFIG
+        .scrobbling
+        .lastfm
+        .as_ref()
+        .is_some_and(|c| c.prefer_album_artist)
+    {
+        album_artist().or_else(artist)
+    } else {
+        artist().or_else(album_artist)
+    }
+}
+
 fn default_state() -> PlayState {
     PlayState::Paused
 }
@@ -65,7 +81,7 @@ impl Scrobble {
     fn new(song: SongInfo) -> Self {
         Self {
             state: song.state,
-            artist: song.artist().map(ToOwned::to_owned),
+            artist: song_artist(&song).map(ToOwned::to_owned),
             track: song.single_tag_value(&Tag::Title).map(ToOwned::to_owned),
             album: song.single_tag_value(&Tag::Album).map(ToOwned::to_owned),
             album_artist: song
@@ -81,7 +97,7 @@ impl Scrobble {
     fn is_same_song(&self, song: &SongInfo) -> bool {
         self.track.as_deref() == song.single_tag_value(&Tag::Title)
             && self.album.as_deref() == song.single_tag_value(&Tag::Album)
-            && self.artist.as_deref() == song.artist()
+            && self.artist.as_deref() == song_artist(song)
     }
 
     fn eligible_for_submission(&self) -> bool {
