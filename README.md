@@ -221,5 +221,6 @@ mpd-herald authenticate
 The command opens Last.fm in your browser. After granting access, press enter in
 the terminal to save the session.
 
-A track is scrobbled after at least half its duration has played, or after four
-minutes.
+A track with a known duration of at least 30 seconds is scrobbled after half its
+duration has played, or after four minutes. A track with
+an unknown duration is scrobbled after four minutes.

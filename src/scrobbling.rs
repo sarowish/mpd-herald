@@ -101,7 +101,8 @@ impl Scrobble {
     }
 
     fn eligible_for_submission(&self) -> bool {
-        mpd::playtime_threshold_reached(self.duration, self.played_duration)
+        self.duration.is_none_or(|d| d >= 30)
+            && mpd::playtime_threshold_reached(self.duration, self.played_duration)
     }
 
     fn update_song(&mut self, song: &SongInfo) {
