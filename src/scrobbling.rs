@@ -65,7 +65,7 @@ impl Scrobble {
     fn new(song: SongInfo) -> Self {
         Self {
             state: song.state,
-            artist: song.single_tag_value(&Tag::Artist).map(ToOwned::to_owned),
+            artist: song.artist().map(ToOwned::to_owned),
             track: song.single_tag_value(&Tag::Title).map(ToOwned::to_owned),
             album: song.single_tag_value(&Tag::Album).map(ToOwned::to_owned),
             album_artist: song
@@ -81,7 +81,7 @@ impl Scrobble {
     fn is_same_song(&self, song: &SongInfo) -> bool {
         self.track.as_deref() == song.single_tag_value(&Tag::Title)
             && self.album.as_deref() == song.single_tag_value(&Tag::Album)
-            && self.artist.as_deref() == song.single_tag_value(&Tag::Artist)
+            && self.artist.as_deref() == song.artist()
     }
 
     fn eligible_for_submission(&self) -> bool {

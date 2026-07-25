@@ -99,6 +99,11 @@ impl SongInfo {
         self.fired_at = utils::now();
     }
 
+    pub fn artist(&self) -> Option<&str> {
+        self.single_tag_value(&Tag::Artist)
+            .or_else(|| self.single_tag_value(&Tag::AlbumArtist))
+    }
+
     fn tag_values(&self, tag: &Tag) -> &[String] {
         match self.tags.get(tag) {
             Some(v) => v.as_slice(),
