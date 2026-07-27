@@ -10,6 +10,7 @@ use image::{GenericImageView, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use mpd_client::{Client as MpdClient, responses::PlayState};
 use notify_rust::{Hint, Image, Notification, NotificationHandle};
 use std::fs::File;
+use tracing::{warn, info};
 
 struct NotificationText {
     summary: String,
@@ -60,6 +61,12 @@ pub fn spawn() -> Option<NotificationSender> {
 }
 
 pub async fn run(rx: NotificationReceiver) -> Result<()> {
+    match cache::prune_images() {
+        Ok(0) => (),
+        Ok(count) => info!("Pruned {count} cached images"),
+        Err(e) => warn!("Failed to prune image cache: {e}"),
+    }
+
     let mut handle = None;
 
     while let Ok(event) = rx.recv().await {
