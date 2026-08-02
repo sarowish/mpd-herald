@@ -129,7 +129,11 @@ impl SongInfo {
 
     pub fn check_update(&self, other: &Self, change_subsystem: Subsystem) -> SongUpdate {
         if self.state == PlayState::Stopped {
-            return SongUpdate::Stopped;
+            return if other.state == PlayState::Stopped {
+                SongUpdate::Unchanged
+            } else {
+                SongUpdate::Stopped
+            };
         }
 
         if self.queue_id != other.queue_id || self.url != other.url || self.tags != other.tags {
