@@ -6,7 +6,7 @@ use crate::{
 };
 use anyhow::Result;
 use discord_presence::models::DisplayType as PresenceDisplayType;
-use serde::Deserialize;
+use serde::{Deserialize, de};
 
 pub static CONFIG: LazyLock<Config> = LazyLock::new(|| match Config::new() {
     Ok(config) => config,
@@ -75,6 +75,30 @@ impl From<&DisplayType> for PresenceDisplayType {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DiscordRpcButton {
+    pub label: CompiledFormat,
+    pub url: CompiledFormat,
+}
+
+fn deserialize_discord_rpc_buttons<'de, D>(
+    deserializer: D,
+) -> Result<Vec<DiscordRpcButton>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let buttons = Vec::deserialize(deserializer)?;
+
+    if buttons.len() > 2 {
+        return Err(de::Error::custom(
+            "Discord Rich Presence supports at most 2 buttons",
+        ));
+    }
+
+    Ok(buttons)
+}
+
+#[derive(Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct DiscordRpcConfig {
     pub enable: bool,
@@ -86,6 +110,8 @@ pub struct DiscordRpcConfig {
     pub large_image: String,
     pub small_image: String,
     pub display_type: DisplayType,
+    #[serde(deserialize_with = "deserialize_discord_rpc_buttons")]
+    pub buttons: Vec<DiscordRpcButton>,
 }
 
 impl Default for DiscordRpcConfig {
@@ -100,6 +126,7 @@ impl Default for DiscordRpcConfig {
             large_image: String::default(),
             small_image: String::default(),
             display_type: DisplayType::State,
+            buttons: Vec::new(),
         }
     }
 }

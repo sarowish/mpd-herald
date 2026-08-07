@@ -1,5 +1,5 @@
 use crate::{
-    config::CONFIG,
+    config::{CONFIG, DiscordRpcButton},
     mpd::{SongInfo, SongUpdate},
 };
 use anyhow::Result;
@@ -117,6 +117,15 @@ fn build_timestamp(song: &SongInfo) -> ActivityTimestamps {
     timestamps.start(start).end(end)
 }
 
+fn add_buttons(activity: Activity, buttons: &[DiscordRpcButton], song: &SongInfo) -> Activity {
+    buttons.iter().fold(activity, |activity, button| {
+        let label = button.label.render(song);
+        let url = button.url.render(song);
+
+        activity.append_buttons(|activity_button| activity_button.label(label).url(url))
+    })
+}
+
 async fn run(rx: RpcReceiver) {
     let mut drpc = DiscordClient::new(CONFIG.discord_rpc.client_id);
 
@@ -194,7 +203,8 @@ async fn update(drpc: &mut DiscordClient, song: &SongInfo, queue: bool) {
     let image_url = get_albumart(song).await;
 
     let activity = |act: Activity| {
-        act.activity_type(ActivityType::Listening)
+        let activity = act
+            .activity_type(ActivityType::Listening)
             .state(state)
             .details(details)
             .status_display((&rpc_config.display_type).into())
@@ -219,7 +229,9 @@ async fn update(drpc: &mut DiscordClient, song: &SongInfo, queue: bool) {
 
                 assets
             })
-            .timestamps(|_| build_timestamp(song))
+            .timestamps(|_| build_timestamp(song));
+
+        add_buttons(activity, &rpc_config.buttons, song)
     };
 
     if queue {

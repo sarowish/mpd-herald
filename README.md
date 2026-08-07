@@ -114,6 +114,7 @@ small_text = ""
 large_image = ""
 small_image = ""
 display_type = "state"
+buttons = []
 
 [scrobbling.lastfm]
 enable = false
@@ -150,21 +151,33 @@ images are cached in the platform cache directory.
 
 The `[discord_rpc]` section has:
 
-| Option         | Description                                                          | Default               |
-| -------------- | -------------------------------------------------------------------- | --------------------- |
-| `enable`       | Enable this integration.                                             | `true`                |
-| `client_id`    | Discord application client ID.                                       | `1465967948861669469` |
-| `state`        | Format string for the second line.                                   | `"%albumartist%"`     |
-| `details`      | Format string for the top line.                                      | `"%title%"`           |
-| `large_text`   | Format string for the bottom line and large image hover tooltip.     | `"%album%"`           |
-| `small_text`   | Format string for the small image hover tooltip.                     | `""`                  |
-| `large_image`  | Fallback asset key or external URL for the large image.              | `""`                  |
-| `small_image`  | Asset key or external URL for the small image.                       | `""`                  |
-| `display_type` | Field used for Discord's status text: `name`, `state`, or `details`. | `"state"`             |
+| Option          | Description                                                          | Default               |
+| --------------- | -------------------------------------------------------------------- | --------------------- |
+| `enable`        | Enable this integration.                                             | `true`                |
+| `client_id`     | Discord application client ID.                                       | `1465967948861669469` |
+| `state`         | Format string for the second line.                                   | `"%albumartist%"`     |
+| `details`       | Format string for the top line.                                      | `"%title%"`           |
+| `large_text`    | Format string for the bottom line and large image hover tooltip.     | `"%album%"`           |
+| `small_text`    | Format string for the small image hover tooltip.                     | `""`                  |
+| `large_image`   | Fallback asset key or external URL for the large image.              | `""`                  |
+| `small_image`   | Asset key or external URL for the small image.                       | `""`                  |
+| `display_type`  | Field used for Discord's status text: `name`, `state`, or `details`. | `"state"`             |
+| `buttons`       | Up to two activity buttons, each with a `label` and `url`.           | `[]`                  |
 
 Discord album art is fetched from Cover Art Archive when the song has a
 MusicBrainz release ID or release group ID tag. If no image is found,
 `large_image` is used when configured.
+
+To add activity buttons, set `buttons` to an array containing one or two button
+definitions:
+
+```toml
+[discord_rpc]
+buttons = [
+    { label = "Listen to %title%", url = "https://example.com/tracks/%title%" },
+    { label = "%artist%", url = "https://example.com/artists/%artist%" },
+]
+```
 
 The `[scrobbling.lastfm]` section has:
 
