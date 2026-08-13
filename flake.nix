@@ -14,6 +14,7 @@
 
   outputs =
     {
+      self,
       nixpkgs,
       crane,
       flake-utils,
@@ -39,6 +40,8 @@
 
         mpd-herald = craneLib.buildPackage {
           src = craneLib.cleanCargoSource ./.;
+
+          MPD_HERALD_GIT_REV = self.shortRev or self.dirtyShortRev or "";
 
           buildInputs = [ ];
         };

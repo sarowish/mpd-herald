@@ -1,6 +1,7 @@
 use crate::{config::CONFIG, service::Service};
 use anyhow::Result;
 
+mod album_art;
 mod cache;
 mod cli;
 mod config;

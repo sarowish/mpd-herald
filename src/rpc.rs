@@ -1,16 +1,14 @@
 use crate::{
+    album_art,
     config::{CONFIG, DiscordRpcButton},
     mpd::{SongInfo, SongUpdate},
 };
-use anyhow::Result;
 use discord_presence::{
     Client as DiscordClient,
     models::{Activity, ActivityTimestamps, ActivityType},
 };
-use mpd_client::{client::Subsystem, responses::PlayState, tag::Tag};
-use reqwest::Client;
-use std::{collections::HashMap, fmt::Display, sync::LazyLock};
-use tokio::sync::{Mutex, watch};
+use mpd_client::{client::Subsystem, responses::PlayState};
+use tokio::sync::watch;
 use tracing::{error, info};
 
 pub type RpcSender = async_channel::Sender<SongInfo>;
@@ -26,78 +24,6 @@ pub fn spawn() -> Option<RpcSender> {
     tokio::spawn(async move { run(rpc_rx).await });
 
     Some(rpc_tx)
-}
-
-enum ReleaseType {
-    Release,
-    ReleaseGroup,
-}
-
-impl Display for ReleaseType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Release => String::from("release"),
-                Self::ReleaseGroup => String::from("release-group"),
-            }
-        )
-    }
-}
-
-#[derive(Default)]
-struct AlbumArtClient {
-    client: Client,
-    cache: HashMap<String, String>,
-}
-
-async fn get_albumart(song: &SongInfo) -> Result<String> {
-    static CLIENT: LazyLock<Mutex<AlbumArtClient>> =
-        LazyLock::new(|| Mutex::new(AlbumArtClient::default()));
-
-    let mut guard = CLIENT.lock().await;
-
-    let release_group_id_tag = Tag::Other("MUSICBRAINZ_RELEASEGROUPID".into());
-    let Some((rel_type, id)) = song
-        .single_tag_value(&Tag::MusicBrainzReleaseId)
-        .map(|id| (ReleaseType::Release, id.to_owned()))
-        .or_else(|| {
-            song.single_tag_value(&release_group_id_tag)
-                .map(|id| (ReleaseType::ReleaseGroup, id.to_owned()))
-        })
-    else {
-        return Err(anyhow::anyhow!("No musicbrainz id"));
-    };
-
-    if let Some(url) = guard.cache.get(&id) {
-        return Ok(url.to_owned());
-    }
-
-    let url = format!("https://coverartarchive.org/{rel_type}/{id}/front-250");
-    let Ok(resp) = guard.client.get(&url).send().await else {
-        return Ok(url);
-    };
-
-    if let 200 | 307 = resp.status().as_u16() {
-        let url = resp.url().to_string();
-        guard.cache.insert(id, url.clone());
-        return Ok(url);
-    } else if matches!(rel_type, ReleaseType::ReleaseGroup) {
-        return Err(anyhow::anyhow!("No image"));
-    }
-
-    let Some(url) = song
-        .single_tag_value(&release_group_id_tag)
-        .map(|id| format!("https://coverartarchive.org/release-group/{id}/front-250"))
-    else {
-        return Err(anyhow::anyhow!("No musicbrainz release group id"));
-    };
-
-    Ok(match guard.client.get(&url).send().await {
-        Ok(resp) if matches!(resp.status().as_u16(), 200 | 307) => resp.url().to_string(),
-        _ => url,
-    })
 }
 
 fn build_timestamp(song: &SongInfo) -> ActivityTimestamps {
@@ -200,7 +126,7 @@ async fn update(drpc: &mut DiscordClient, song: &SongInfo, queue: bool) {
     let large_text = rpc_config.large_text.render(song);
     let small_text = rpc_config.small_text.render(song);
 
-    let image_url = get_albumart(song).await;
+    let image_url = album_art::get(song).await;
 
     let activity = |act: Activity| {
         let activity = act

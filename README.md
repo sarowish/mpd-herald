@@ -165,8 +165,10 @@ The `[discord_rpc]` section has:
 | `buttons`       | Up to two activity buttons, each with a `label` and `url`.           | `[]`                  |
 
 Discord album art is fetched from Cover Art Archive when the song has a
-MusicBrainz release ID or release group ID tag. If no image is found,
-`large_image` is used when configured.
+MusicBrainz release ID or release group ID tag. When both tags are absent,
+MusicBrainz is searched using the `AlbumArtist` (or `Artist`) and `Album`
+tags for a release group. If no image is found, `large_image` is used when
+configured.
 
 To add activity buttons, set `buttons` to an array containing one or two button
 definitions:
