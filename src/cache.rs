@@ -78,7 +78,7 @@ pub fn prune_images() -> Result<usize> {
     }
 
     let mut count = 0;
-    entries.sort_unstable_by(|a, b| a.timestamp.cmp(&b.timestamp));
+    entries.sort_unstable_by_key(|a| a.timestamp);
 
     for entry in entries {
         if let Err(e) = std::fs::remove_file(&entry.path) {
