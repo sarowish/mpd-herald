@@ -10,7 +10,7 @@ use image::{GenericImageView, codecs::jpeg::JpegEncoder, imageops::FilterType};
 use mpd_client::{Client as MpdClient, responses::PlayState};
 use notify_rust::{Hint, Image, Notification, NotificationHandle};
 use std::fs::File;
-use tracing::{warn, info};
+use tracing::{info, warn};
 
 struct NotificationText {
     summary: String,
