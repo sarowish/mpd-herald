@@ -1,7 +1,12 @@
 [package]
 name = "mpd-herald"
+description = "An MPD companion for notifications, Discord Rich Presence, and Last.fm scrobbling"
 version = "0.1.0"
+repository = "https://github.com/sarowish/mpd-herald"
+license = "MIT"
+readme = "README.md"
 edition = "2024"
+keywords = ["mpd", "discord-rpc", "lastfm", "scrobbling", "notifications"]
 
 [dependencies]
 anyhow = "1.0.100"
